@@ -40,6 +40,7 @@ public final class MeasurementLogger {
 
     public MeasurementLogger(Context context) { this.context = context.getApplicationContext(); }
     public boolean isRecording() { return valuesOut != null; }
+    public File getSessionFolder() { return sessionFolder; }
     public int getCount() { return (int) Math.min(Integer.MAX_VALUE, samples); }
     public File getLastFolder() {
         String name = context.getSharedPreferences("sessions", Context.MODE_PRIVATE).getString("last", "");
@@ -238,7 +239,7 @@ public final class MeasurementLogger {
         if (sessionFolder == null) return;
         File file = new File(sessionFolder, "diagnose.txt");
         try (BufferedWriter w = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8))) {
-            w.write("MagnetRute v0.3.0 – Diagnosebericht\n");
+            w.write("MagnetRute v0.4.0 – Diagnosebericht\n");
             w.write("Erstellt: " + time() + "\n");
             w.write("Android-Version: " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")\n");
             w.write("Geraet: " + Build.MANUFACTURER + " / " + Build.MODEL + "\n");
