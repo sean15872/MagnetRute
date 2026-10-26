@@ -137,6 +137,9 @@ public class SurveyServiceTest {
         assertEquals("recovered",SurveyService.snapshot().state);assertEquals("recovered",store.session(session).getString("status"));
         assertNull(SurveyService.snapshot().fix);assertEquals(0,store.samples(session).size());
         assertTrue(store.events(session).stream().anyMatch(e->"PROCESS_RECOVERED".equals(e.optString("name"))));
+        SurveyService.sensitivity(context,7);SurveyService.configureAccuracy(context,8);
+        assertEquals(7,store.session(session).getJSONObject("config").getDouble("sensitivity"),0);
+        assertEquals(8,store.session(session).getJSONObject("config").getDouble("maxAccuracy"),0);
         SurveyService.stop(context);assertEquals("stopped",store.session(session).getString("status"));
     }
 

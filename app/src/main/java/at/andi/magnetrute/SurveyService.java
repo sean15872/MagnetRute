@@ -117,12 +117,20 @@ public final class SurveyService extends Service implements SensorEventListener,
     public static void sensitivity(Context context,double value) {
         if(!Double.isFinite(value) || value<.5 || value>100) throw new IllegalArgumentException("Empfindlichkeit: 0,5–100 µT");
         context.getSharedPreferences(PREFS,MODE_PRIVATE).edit().putFloat("sensitivity",(float)value).apply();
-        if(instance==null) { recover(context);return; }send(context,SENSITIVITY,null,null,value,false);
+        if(instance==null) { recover(context);saveDormantSetting(context,"sensitivity",value,"EMPFINDLICHKEIT");return; }send(context,SENSITIVITY,null,null,value,false);
     }
     public static void configureAccuracy(Context context,double value) {
         if(!Double.isFinite(value) || value<1 || value>1000) throw new IllegalArgumentException("GPS-Grenze: 1–1000 m");
         context.getSharedPreferences(PREFS,MODE_PRIVATE).edit().putFloat("maxAccuracy",(float)value).apply();
-        if(instance==null) { recover(context);return; }send(context,ACCURACY,null,null,value,false);
+        if(instance==null) { recover(context);saveDormantSetting(context,"maxAccuracy",value,"GPS_FILTER");return; }send(context,ACCURACY,null,null,value,false);
+    }
+    private static void saveDormantSetting(Context context,String key,double value,String event) {
+        String id=current.sessionId;if(id==null)return;
+        try(SurveyStore db=new SurveyStore(context)) {
+            JSONObject row=db.session(id);if(row==null||!("paused".equals(row.optString("status"))||"recovered".equals(row.optString("status"))))return;
+            JSONObject config=row.optJSONObject("config");if(config==null)config=new JSONObject();config.put(key,value);row.put("config",config);db.updateSession(row);
+            db.addEvent(id,event,key+"="+value+"; vor Fortsetzung geändert",SystemClock.elapsedRealtimeNanos());
+        }catch(Exception e){throw new IllegalStateException("Einstellung konnte nicht für die Fortsetzung gespeichert werden",e);}
     }
     private static void send(Context context,String action,String project,String session,double value,boolean foreground) {
         Intent intent=new Intent(context,SurveyService.class).setAction(action);

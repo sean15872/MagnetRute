@@ -63,6 +63,21 @@ public class SurveyActivityTest {
         assertEquals("Garten Nord",store.project(pid).getString("name"));assertEquals(4,store.project(pid).getJSONObject("geometry").getJSONArray("coordinates").getJSONArray(0).length());
         controller.pause().stop().destroy();controller=Robolectric.buildActivity(SurveyActivity.class).create().start().resume().visible();activity=controller.get();idle();
         assertTrue(ReflectionHelpers.<Boolean>getField(map(),"offlineActive"));assertEquals("Garten Nord",ReflectionHelpers.<JSONObject>getField(activity,"project").getString("name"));
+        String session=store.createSession(pid,"Einstellungsprüfung");store.addSample(session,object("total",13));
+        context.getSharedPreferences("survey-service",0).edit().putString("sessionId",session).commit();SurveyService.recover(context);
+        click("Einstellungen");edits(activity.getWindow().getDecorView()).get(6).setText("4,5");click("Einstellungen speichern");
+        JSONObject change=store.events(session).stream().filter(e->"KARTEN_EINSTELLUNGEN".equals(e.optString("name"))).findFirst().get();
+        assertEquals(4.5,new JSONObject(change.getString("details")).getDouble("heatThreshold"),0);assertTrue(change.getLong("timestampNs")>=0);
+        assertEquals(13,store.samples(session).get(0).getDouble("total"),0);
+        // Selecting a map project must not turn the original GPS-optional lab into a GPS requirement.
+        Shadows.shadowOf(RuntimeEnvironment.getApplication()).denyPermissions(android.Manifest.permission.ACCESS_FINE_LOCATION,android.Manifest.permission.ACCESS_COARSE_LOCATION);
+        android.hardware.Sensor sensor=org.robolectric.shadows.ShadowSensor.newInstance(android.hardware.Sensor.TYPE_MAGNETIC_FIELD);
+        Shadows.shadowOf((android.hardware.SensorManager)context.getSystemService(Context.SENSOR_SERVICE)).addSensor(sensor);
+        ActivityController<MainActivity> lab=Robolectric.buildActivity(MainActivity.class).create().start().resume().visible();
+        try {Button record=find(lab.get().getWindow().getDecorView(),Button.class,"● Aufzeichnen");assertNotNull(record);record.performClick();idle();
+            assertTrue(ReflectionHelpers.<MeasurementLogger>getField(lab.get(),"recorder").isRecording());
+            assertFalse(ReflectionHelpers.<Boolean>getField(lab.get(),"locationRequested"));
+        }finally{lab.pause().stop().destroy();}
     }
     @Test public void manuallyCorrectedMarkerPreservesOriginalGpsAndZipImportCreatesCopy()throws Exception {
         String fid=UUID.randomUUID().toString();JSONObject original=object("lat",47.15,"lon",14.13,"accuracy",4,"provider","gps");

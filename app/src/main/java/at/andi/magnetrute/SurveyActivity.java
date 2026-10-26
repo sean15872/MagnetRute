@@ -505,9 +505,12 @@ public final class SurveyActivity extends Activity implements LocationListener {
         EditText smooth=number(fields,"Glättungsradius (m; nur belegte Zellen)",String.valueOf(prefs.getFloat("smooth",0)));
         button(fields,"Einstellungen speichern",()->{
             try {double a=number(accuracy),s=number(sensitivity),c=number(cell),o=number(opacity),r=number(scale),g=number(smooth);
-                if(!Double.isFinite(c)||c<1||c>1000||!Double.isFinite(o)||o<0||o>1||!Double.isFinite(r)||r<=0||r>10000||!Double.isFinite(g)||g<0||g>1000)throw new IllegalArgumentException("Heatmap-Einstellungen außerhalb der erlaubten Bereiche.");
+                if(!Double.isFinite(a)||a<1||a>1000||!Double.isFinite(s)||s<.5||s>100||!Double.isFinite(c)||c<1||c>1000||!Double.isFinite(o)||o<0||o>1||!Double.isFinite(r)||r<=0||r>10000||!Double.isFinite(g)||g<0||g>1000)throw new IllegalArgumentException("Einstellungen außerhalb der erlaubten Bereiche.");
                 double maxAbsolute=number(absolute),t=number(threshold);if(!Double.isFinite(maxAbsolute)||maxAbsolute<=0||maxAbsolute>100000||!Double.isFinite(t)||t<0||t>10000)throw new IllegalArgumentException("Skala / Schwelle ungültig.");
-                SurveyService.configureAccuracy(this,a);SurveyService.sensitivity(this,s);prefs.edit().putFloat("cell",(float)c).putFloat("opacity",(float)o).putFloat("scale",(float)r).putFloat("absoluteScale",(float)maxAbsolute).putFloat("heatThreshold",(float)t).putFloat("smooth",(float)g).apply();jobStatus="Einstellungen gespeichert. Änderungen im aktiven Messlog protokolliert.";info(jobStatus);
+                SurveyService.configureAccuracy(this,a);SurveyService.sensitivity(this,s);prefs.edit().putFloat("cell",(float)c).putFloat("opacity",(float)o).putFloat("scale",(float)r).putFloat("absoluteScale",(float)maxAbsolute).putFloat("heatThreshold",(float)t).putFloat("smooth",(float)g).apply();
+                String active=SurveyService.snapshot().sessionId;
+                if(active!=null&&store.session(active)!=null)store.addEvent(active,"KARTEN_EINSTELLUNGEN",obj("maxAccuracy",a,"sensitivity",s,"cellMeters",c,"opacity",o,"deltaScale",r,"absoluteScale",maxAbsolute,"heatThreshold",t,"smoothingMeters",g).toString(),SystemClock.elapsedRealtimeNanos());
+                jobStatus="Einstellungen gespeichert. Änderungen im aktiven Messlog protokolliert.";info(jobStatus);
             }catch(Exception e){error(e);}
         });
         fields.addView(label("Kartendaten lokal: "+String.format(Locale.GERMANY,"%.0f MiB frei",getFilesDir().getUsableSpace()/1048576.0)+". Offline-Ausschnitte sind auf 250 MiB / 4000 Kacheln begrenzt. GPS ist auch bei hochauflösenden Luftbildern nicht zentimetergenau.",13));

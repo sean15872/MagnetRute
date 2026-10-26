@@ -163,6 +163,8 @@ public final class MainActivity extends Activity implements SensorEventListener,
         Button surveyButton=button("Begehungen / Einstellungen",0xffc4d3e5);
         surveyButton.setOnClickListener(v -> startActivity(new Intent(this,SurveyActivity.class).putExtra("screen","Aufzeichnungen")));
         navigation.addView(surveyButton,rowWeight());add(root,navigation,8);
+        Button surveyRecording=button("Begehung auf Karte starten / pausieren",MINT);
+        surveyRecording.setOnClickListener(v -> toggleSurveyRecording());add(root,surveyRecording,8);
         Button plans=button("Grundriss-Scanner öffnen",MINT);
         plans.setOnClickListener(v -> startActivity(new Intent(this,PlanActivity.class)));
         add(root,plans,12);
@@ -220,12 +222,12 @@ public final class MainActivity extends Activity implements SensorEventListener,
         LinearLayout locationPanel=section();
         add(locationPanel,label("STANDORT / KARTIERUNG",12,SUB,true),6);
         locationSwitch=new Switch(this);
-        locationSwitch.setText("GPS-Standort mit aufzeichnen");
+        locationSwitch.setText("GPS im Messlabor-Log mit aufzeichnen");
         locationSwitch.setTextColor(TEXT);
         locationSwitch.setTextSize(14);
         locationSwitch.setChecked(false); // Bewusste Freigabe bei jedem App-Start.
         add(locationPanel,locationSwitch,5);
-        locationView=label("Standort ist AUS. Kein GPS-Logging.",12,SUB,false);
+        locationView=label("Messlabor-GPS ist AUS; Begehung wird separat gesteuert.",12,SUB,false);
         add(locationPanel,locationView,7);
         add(locationPanel,label("Bei aktivierter Messung werden Koordinaten, Genauigkeit, Quelle und Zeit erfasst. " +
             "Markierungen werden für spätere Karten als GeoJSON exportiert. " +
@@ -242,7 +244,7 @@ public final class MainActivity extends Activity implements SensorEventListener,
                 stopLocation();
                 lastLocation=null;
                 recorder.setLocationTrackingEnabled(false);
-                locationView.setText("Standort ist AUS. Kein GPS-Logging.");
+                locationView.setText("Messlabor-GPS ist AUS; Begehung wird separat gesteuert.");
             }
         });
         add(root,locationPanel,13);
@@ -318,7 +320,7 @@ public final class MainActivity extends Activity implements SensorEventListener,
         if(byUser) SurveyService.reference(this);
         if(byUser) Toast.makeText(this,"Referenz gesetzt (Mittelwert der letzten 3 s)",Toast.LENGTH_SHORT).show();
     }
-    private void toggleRecording() {
+    private void toggleSurveyRecording() {
         // The offline project recorder is independent of the displayed Activity.
         String projectId=getSharedPreferences("survey-ui",MODE_PRIVATE).getString("projectId","");
         if(!projectId.isEmpty()) {
@@ -334,6 +336,10 @@ public final class MainActivity extends Activity implements SensorEventListener,
             Toast.makeText(this,"Begehung wird unabhängig von der Ansicht gespeichert; Stopp / Export auf der Karte.",Toast.LENGTH_LONG).show();
             return;
         }
+        startActivity(new Intent(this,SurveyActivity.class));
+        Toast.makeText(this,"Zuerst auf der Karte ein Grundstück auswählen.",Toast.LENGTH_LONG).show();
+    }
+    private void toggleRecording() {
         if(recorder.isRecording()) {
             recorder.stop();
             getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
