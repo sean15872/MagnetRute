@@ -65,6 +65,7 @@ public final class OfflineMapView extends View {
     private final GestureDetector gestures;
     private final ScaleGestureDetector scales;
     private volatile boolean offlineActive=true;
+    private boolean usingFallbackTiles;
     private volatile int generation;
     private OfflineTiles localTiles;
     private File mapFile;
@@ -274,6 +275,12 @@ public final class OfflineMapView extends View {
         drawEditing(canvas);drawLocation(canvas);drawAttribution(canvas,absent);
     }
 
+    /**
+     * Prefer the sharpest tile, but never replace a usable lower-resolution
+     * orthophoto with the checkerboard merely because a high zoom is unavailable.
+     * All candidates use the same Web-Mercator coordinates and tile generation.
+     * Offline mode only reads local MBTiles; no network fallback is permitted.
+     */
     private boolean drawTiles(Canvas canvas) {
         double[] center=GeoMath.world(latitude,longitude,zoom);
         double radians=Math.toRadians(rotation);
@@ -281,31 +288,50 @@ public final class OfflineMapView extends View {
         double extentY=(Math.abs(Math.sin(radians))*getWidth()+Math.abs(Math.cos(radians))*getHeight())/2;
         int firstX=(int)Math.floor((center[0]-extentX)/256),lastX=(int)Math.floor((center[0]+extentX)/256);
         int firstY=(int)Math.floor((center[1]-extentY)/256),lastY=(int)Math.floor((center[1]+extentY)/256),count=1<<zoom;
+        int nativeZoom=Math.min(zoom,maxZoom);
+        int lowestZoom=Math.max(minZoom,nativeZoom-5);
         boolean absent=false;
+        boolean enlarged=false;
         canvas.save();canvas.translate(getWidth()/2f,getHeight()/2f);canvas.rotate(rotation);
         paint.setStyle(Paint.Style.FILL);paint.setFilterBitmap(true);
         for(int row=firstY;row<=lastY;row++) for(int column=firstX;column<=lastX;column++) {
             if(row<0 || row>=count) continue;
             int x=((column%count)+count)%count;
-            // Digital magnification uses downloaded source tiles; it does not add detail.
-            int nativeZoom=Math.min(zoom,maxZoom);
-            int over=zoom-nativeZoom;
-            int parentX=x>>over,parentY=row>>over;
-            String key=generation+"/"+nativeZoom+"/"+parentX+"/"+parentY;
-            Bitmap tile=tileCache.get(key);
+            Bitmap tile=null;
+            int tileZoom=nativeZoom;
+            // Try ancestors of the visible tile until a cached image is found.
+            // Issue bounded requests for the desired level and useful fallbacks.
+            for(int z=nativeZoom;z>=lowestZoom;z--) {
+                int shift=zoom-z;
+                int tx=x>>shift,ty=row>>shift;
+                String key=generation+"/"+z+"/"+tx+"/"+ty;
+                Bitmap cached=tileCache.get(key);
+                if(cached!=null&&!cached.isRecycled()) {
+                    tile=cached;tileZoom=z;break;
+                }
+                if(z>=nativeZoom-2 || z==lowestZoom) requestTile(key,z,tx,ty);
+            }
             float left=(float)(column*256.0-center[0]),top=(float)(row*256.0-center[1]);
-            if(tile!=null && !tile.isRecycled()) {
-                int divisor=1<<over,offsetX=x&(divisor-1),offsetY=row&(divisor-1);
-                int sx=(int)Math.floor(offsetX*256.0/divisor),sy=(int)Math.floor(offsetY*256.0/divisor);
-                int ex=(int)Math.ceil((offsetX+1)*256.0/divisor),ey=(int)Math.ceil((offsetY+1)*256.0/divisor);
-                canvas.drawBitmap(tile,new Rect(sx,sy,Math.min(256,Math.max(sx+1,ex)),Math.min(256,Math.max(sy+1,ey))),new RectF(left,top,left+256,top+256),paint);
+            if(tile!=null) {
+                int shift=zoom-tileZoom,divisor=1<<shift;
+                int offsetX=x&(divisor-1),offsetY=row&(divisor-1);
+                int sx=(int)Math.floor(offsetX*256.0/divisor);
+                int sy=(int)Math.floor(offsetY*256.0/divisor);
+                int ex=(int)Math.ceil((offsetX+1)*256.0/divisor);
+                int ey=(int)Math.ceil((offsetY+1)*256.0/divisor);
+                canvas.drawBitmap(tile,new Rect(sx,sy,Math.min(256,Math.max(sx+1,ex)),
+                    Math.min(256,Math.max(sy+1,ey))),new RectF(left,top,left+256,top+256),paint);
+                if(tileZoom<zoom) enlarged=true;
             } else {
-                absent=true;paint.setColor(0xff233149);canvas.drawRect(left,top,left+256,top+256,paint);
-                paint.setColor(0xff34435b);canvas.drawRect(left,top,left+128,top+128,paint);canvas.drawRect(left+128,top+128,left+256,top+256,paint);
-                requestTile(key,nativeZoom,parentX,parentY);
+                absent=true;
+                paint.setColor(0xff233149);canvas.drawRect(left,top,left+256,top+256,paint);
+                paint.setColor(0xff34435b);canvas.drawRect(left,top,left+128,top+128,paint);
+                canvas.drawRect(left+128,top+128,left+256,top+256,paint);
             }
         }
-        canvas.restore();return absent;
+        canvas.restore();
+        usingFallbackTiles=enlarged;
+        return absent;
     }
 
     private void requestTile(String key,int z,int x,int y) {
@@ -463,8 +489,8 @@ public final class OfflineMapView extends View {
         paint.setStyle(Paint.Style.FILL);paint.setColor(0xdd0a1020);canvas.drawRect(0,getHeight()-dp(40),getWidth(),getHeight(),paint);
         label(canvas,attribution.isEmpty()?"Datenquelle unbekannt":attribution,dp(5),getHeight()-dp(23),Color.WHITE);
         boolean available; synchronized(tileLock) { available=localTiles!=null; }
-        String state=offlineActive?(!available?"Offline · Kartenpaket fehlt":zoom>maxZoom?"Offline · digital vergrößert (keine neuen Bilddetails)":zoom<minZoom?"Offline · Zoom nicht gespeichert":absent?"Offline · Kachel fehlt / außerhalb des Pakets":"Offline · lokale Karte"):
-            "Online-Vorbereitung · noch keine Offline-Zusage";
+        String state=offlineActive?(!available?"Offline · Kartenpaket fehlt":absent?"Offline · Kacheln fehlen / außerhalb des Pakets":usingFallbackTiles?"Offline · Luftbild vergrößert (keine neuen Details)":"Offline · lokale Karte"):
+            absent?"Online · Bildkacheln werden geladen oder fehlen":usingFallbackTiles?"Online · vorhandenes Luftbild vergrößert":"Online-Vorbereitung · noch keine Offline-Zusage";
         label(canvas,state,dp(5),getHeight()-dp(7),0xffb7cce7);
     }
     private void label(Canvas canvas,String value,float x,float y,int color) {
