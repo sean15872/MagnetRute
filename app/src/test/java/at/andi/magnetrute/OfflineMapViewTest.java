@@ -107,6 +107,31 @@ public final class OfflineMapViewTest {
         assertEquals("Digitale Vergrößerung darf offline keine neuen Online-Kacheln abrufen",0,calls.get());
     }
 
+    @Test public void missingHighZoomFallsBackToAvailableAerialPhoto() throws Exception {
+        AtomicInteger high=new AtomicInteger(),parent=new AtomicInteger();
+        OfflineMapView map=new OfflineMapView(RuntimeEnvironment.getApplication(),(source,z,x,y) -> {
+            if(z>=20) {high.incrementAndGet();throw new java.io.IOException("No high zoom tile");}
+            parent.incrementAndGet();
+            Bitmap b=Bitmap.createBitmap(256,256,Bitmap.Config.ARGB_8888);
+            b.eraseColor(Color.GREEN);return b;
+        });
+        map.layout(0,0,512,512);map.setProject(project("fallback"),null,false);
+        map.setZoom(21);
+        draw(map).recycle();idleTiles(map);
+        Bitmap fallback=draw(map);
+        assertEquals("Parent orthophoto remains visible if provider cannot supply higher zoom",
+            Color.GREEN,fallback.getPixel(256,256));
+        fallback.recycle();
+        assertTrue(high.get()>0);assertTrue(parent.get()>0);
+        map.setZoom(22);
+        Bitmap zoomed=draw(map);
+        assertEquals(Color.GREEN,zoomed.getPixel(256,256));
+        zoomed.recycle();
+        int before=high.get();
+        draw(map).recycle();idleTiles(map);
+        assertEquals("Missing tile is not re-requested on every frame",before,high.get());
+    }
+
     @Test public void previewIsExplicitAndOfflineSwitchRemovesRemoteFallback() throws Exception {
         AtomicInteger calls=new AtomicInteger();OfflineMapView map=view(calls);map.setProject(project("preparation"),null,false);
         draw(map).recycle();idleTiles(map);assertTrue(calls.get()>0);
