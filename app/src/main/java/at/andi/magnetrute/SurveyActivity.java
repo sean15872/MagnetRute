@@ -461,8 +461,8 @@ public final class SurveyActivity extends Activity implements LocationListener {
         new AlertDialog.Builder(this).setTitle(feature.optString("name")).setItems(new String[]{"Name / Notiz / Stil","Geometrie verschieben / bearbeiten","Foto anzeigen","Löschen"},(d,w) -> {
             if(w==0)featureDialog(feature);
             else if(w==1){JSONObject g=feature.optJSONObject("geometry");editingId=feature.optString("id");editType=g.optString("type");editPoints.clear();
-                if("Point".equals(editType)){JSONArray p=g.optJSONArray("coordinates");editPoints.add(new double[]{p.optDouble(0),p.optDouble(1)});jobStatus="Punktgriff ziehen; Abschließen speichert die korrigierte Lage.";}
-                else {JSONArray a=g.optJSONArray("coordinates");for(int i=0;i<a.length();i++){JSONArray p=a.optJSONArray(i);editPoints.add(new double[]{p.optDouble(0),p.optDouble(1)});}}refreshEditing();}
+                if("Point".equals(editType)){JSONArray p=g.optJSONArray("coordinates");editPoints.add(new double[]{p.optDouble(0),p.optDouble(1)});jobStatus="Punktgriff ziehen; Fertig speichert die korrigierte Lage.";}
+                else {JSONArray a=g.optJSONArray("coordinates");for(int i=0;i<a.length();i++){JSONArray p=a.optJSONArray(i);editPoints.add(new double[]{p.optDouble(0),p.optDouble(1)});}}refreshEditing();showScreen("Karte");}
             else if(w==2)showPhoto(feature);
             else new AlertDialog.Builder(this).setMessage("Markierung endgültig löschen?").setNegativeButton("Abbrechen",null).setPositiveButton("Löschen",(a,k)->{store.deleteFeature(feature.optString("id"));lastRefresh=0;}).show();
         }).show();
