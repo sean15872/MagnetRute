@@ -154,7 +154,7 @@ public final class MainActivity extends Activity implements SensorEventListener,
         LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(14),dp(14),dp(14),dp(30));sv.addView(root);
         TextView title=label("MagnetRute",26,TEXT,true);add(root,title,1);
-        TextView subtitle=label("v0.4.0  •  Virtuelle Wünschelrute & Magnetfeld-Labor",12,SUB,false);
+        TextView subtitle=label("v0.4.1  •  Virtuelle Wünschelrute & Magnetfeld-Labor",12,SUB,false);
         add(root,subtitle,12);
         LinearLayout navigation=row();
         Button mapButton=button("Karte",MINT);
