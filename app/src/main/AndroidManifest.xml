@@ -2,10 +2,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-feature android:name="android.hardware.location" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.compass" android:required="false" />
     <application
-        android:label="MagnetRute v0.3"
+        android:label="MagnetRute v0.4"
         android:icon="@drawable/ic_launcher"
         android:allowBackup="false"
         android:theme="@android:style/Theme.Material.NoActionBar"
@@ -20,6 +24,10 @@
         </activity>
         <activity android:name=".PlanActivity" android:exported="false"
             android:configChanges="orientation|screenSize" />
+        <activity android:name=".SurveyActivity" android:exported="false"
+            android:configChanges="orientation|screenSize" />
+        <service android:name=".SurveyService" android:exported="false"
+            android:foregroundServiceType="location" />
         <provider android:name=".PlanCaptureProvider"
             android:authorities="at.andi.magnetrute.capture"
             android:exported="false" android:grantUriPermissions="true" />

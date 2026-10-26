@@ -1,6 +1,17 @@
-# MagnetRute v0.3.0 – virtuelle Wünschelrute / Android-Magnetfeldlabor
+# MagnetRute v0.4.0 – Offline-Kartierung und Android-Magnetfeldlabor
 
-**Android-App mit Magnetometer-Visualisierung, lageunabhängigen Magnetfeldwerten, optionalem GPS und ZIP-Diagnoselog.**
+**Android-App mit Offline-Grundstückskarten, GPS-Messspuren, Magnetfeld-Heatmaps, Markierungen und Grundriss-Scanner.**
+
+## Neu in v0.4.0
+
+Über **Karte** ein Grundstück vorbereiten, Polygon zeichnen und den begrenzten Ausschnitt einschließlich gewählter Zoomstufen als MBTiles speichern. Danach funktionieren Karte, GPS, Messungen, Marker, Linien, Heatmap, Wiederholungsvergleich und Projekt-Sicherungen ohne Netz. Ein aktives Offline-Projekt lädt keine fehlenden Kacheln online nach.
+
+- [Anleitung: Karte laden → Flugmodus → offline messen](docs/v0.4-offline-anleitung.md)
+- [Geprüfte Kartenquellen und Lizenzen](docs/v0.4-sources.md)
+- [Prüfergebnisse und Abnahmegrenzen](docs/v0.4-validation.md)
+- [Änderungsprotokoll](CHANGELOG.md)
+
+Die Aufnahme wird unabhängig von Ansichtswechseln gespeichert. Schlechte GPS-Fixes bleiben als Rohdaten erhalten, werden aber aus der Karte gefiltert. Heatmaps zeigen gemessene physikalische Werte, keine Aufenthaltsdichte. Auf einem Gerät beendete Prozesse werden nicht als lückenlos weiterlaufende Aufnahme ausgegeben; eine unterbrochene Sitzung lässt sich ausdrücklich fortsetzen.
 
 ## Funktionsumfang
 
@@ -13,7 +24,7 @@
 - Logstart/-stopp; Logdatei enthält Rohdaten, abgeleitete Komponenten, gleitenden Messwert, Referenz, Delta, Bewegungsindikator, Sensorgenauigkeit, Zeitstempel.
 - Manuelle Markierungen (z.B. "1 m vor Kamin"). Automatische Erfassung von deutlichen Ausschlägen.
 - Teilbarer **MagnetRute_Log.zip** oder „Log als ZIP speichern“ über die Android-Dateiauswahl mit `messwerte.csv`, `standorte.csv`, `ereignisse.csv`, `kartenpunkte.geojson` und `diagnose.txt`.
-- Keine Werbung, keine Internetberechtigung, keine Cloud-Übertragung. Standortfreigabe ist **optional und beim Start ausgeschaltet**; die App misst auch ohne GPS.
+- Keine Werbung, keine automatische Cloud-Übertragung von Messdaten. Internet wird für ausdrücklich gestartete Karten-/Adressabfragen verwendet. Standortfreigabe ist **optional und beim Start ausgeschaltet**; die App misst auch ohne GPS.
 
 ## Grundriss-Scanner (v0.3.0)
 
@@ -47,7 +58,7 @@ Der Shell-Testlauf prüft Sensormathematik, Perspektivgeometrie, Kalibrierung un
 
 - Schalter **GPS-Standort mit aufzeichnen** ist beim Appstart standardmäßig AUS. Erst beim Einschalten werden die Android-Berechtigungen für genauen/ungefähren Vordergrundstandort angefragt.
 - Erlaubst du „Genau“, kann GPS genutzt werden, sofern der GPS-Anbieter aktiv ist. Bei „Ungefähr“ ist die georeferenzierte Kartierung deutlich ungenauer, die Magnetmessung funktioniert dennoch.
-- Während die App **sichtbar** ist, werden GPS- und Netzwerk-Fixes empfangen. Keine Hintergrundortung und keine Internetfreigabe.
+- Im bisherigen Messlabor werden GPS- und Netzwerk-Fixes bei sichtbarer Messansicht empfangen. Der v0.4-Begehungsdienst kann nach ausdrücklichem Start mit Systembenachrichtigung weiterarbeiten; Karten-/Adressabfragen erfolgen nur in der Online-Vorbereitung.
 - Während einer Aufnahme enthält `messwerte.csv` jede Magnetfeldmessung mit **letztem gültigen Standortfix** (maximal 5 Sekunden alt), `gps_accuracy_m`, `gps_fix_unix_ms`, `gps_fix_elapsed_ns`, `gps_age_ms`. Fehlt ein aktueller Standort, sind alle GPS-Felder leer; es werden keine Koordinaten erfunden oder interpoliert.
 - `standorte.csv` enthält **alle einzelnen Ortungs-Fixes**, auch wenn kein Magnetfeldereignis eintritt. Provider `gps` / `network`, Genauigkeit und Zeitstempel werden gesichert.
 - `ereignisse.csv` enthält optionale Koordinaten und Genauigkeit zu Referenzen, Markierungen und Ausschlägen.
@@ -65,7 +76,7 @@ Die genaue Schritt-für-Schritt-Anleitung steht in [`GITHUB_ANLEITUNG.md`](GITHU
 ## Android Studio: Installieren / APK bauen
 
 1. ZIP auf PC entpacken.
-2. **Android Studio** öffnen → **Open** → Verzeichnis `MagnetRute_v0.3` wählen (den Ordner, in dem `settings.gradle` liegt).
+2. **Android Studio** öffnen → **Open** → Repository-Verzeichnis `MagnetRute` wählen (den Ordner, in dem `settings.gradle` liegt).
 3. Falls eine Gradle-Abfrage kommt: JDK 17 oder 21 und Android SDK Platform 35 installieren/zulassen. Gradle 8.9 wird beim ersten Start über `gradlew` bzw. `gradlew.bat` von der offiziellen Gradle-Seite mit SHA-256-Prüfung geladen. Das Projekt verwendet Android Gradle Plugin 8.7.3. Internet ist für den ersten Abgleich nötig.
 4. Android-Handy mit USB-Debugging anschließen → **Run** (grünes Dreieck) ODER **Build → Build Bundle(s) / APK(s) → Build APK(s)**.
 5. Gebaute Debug-APK: `app/build/outputs/apk/debug/app-debug.apk`. Beim Kopieren auf Handy nötigenfalls Installation aus dieser Quelle zulassen.
@@ -79,7 +90,7 @@ Aus technischen Gründen enthält dieses Paket keine offizielle `gradle-wrapper.
 Für den manuellen Build auf Linux Mint:
 
 ```sh
-cd MagnetRute_v0.3
+cd MagnetRute
 ./gradlew assembleDebug
 ```
 
@@ -102,15 +113,15 @@ Bedeutung der Anzeigen: Die X/Y/Z-Achsen sind **im Handy** definiert und drehen 
 - `kartenpunkte.geojson`: GeoJSON-Kartenpunkte für markierte/automatisch erkannte Stellen mit vorhandenem GPS-Fix.
 - `diagnose.txt`: Handy-, Sensor- und GPS-Aufnahme-Statistik; enthält selbst keine Koordinaten.
 
-Die App zeichnet **nur während geöffneter App** auf; beim Wechsel in den Hintergrund pausieren die Sensoren. Im Log werden `APP_PAUSE` und `APP_RESUME` erfasst. Bei regulärem App-Schluss wird die Aufnahme beendet.
+Der bisherige Messlabor-Log zeichnet **während geöffneter Messansicht** auf; der neue v0.4-Begehungsdienst arbeitet nach ausdrücklichem Start unabhängig von Ansichtswechseln weiter. Beim bisherigen Log pausieren im Hintergrund die Sensoren. Im Log werden `APP_PAUSE` und `APP_RESUME` erfasst. Bei regulärem App-Schluss wird die Aufnahme beendet.
 
 ## Besonderheiten / Grenzen
 
 - Die magnetischen Komponenten werden aus Magnetometer und TYPE_GRAVITY abgeleitet, ersatzweise accelerometerbasierter Tiefpass. **Keine echte magnetische Nord-/Ost-Projektion**, weil das Magnetfeld selbst gerade das Störsignal darstellt.
 - Ein verändertes Magnetfeld kann z.B. durch Stahlarmierungen, Kaminbauteile, Eisen, elektrische Ströme, Handy-Magnete oder die Autokalibrierung entstehen. Es beweist weder Grundwasser noch einen spezifischen Untergrundstoff.
 - Fehlende Sensoren: Kein Magnetometer → App kann nicht messen. Kein Gravitations-/Beschleunigungssensor → nur Gesamtbetrag zuverlässig verfügbar.
-- Kein Hintergrundservice; Standortaufzeichnung pausiert ebenfalls beim Appwechsel. Kein dauerhafter Handy-Speicherzugriff. Logs bleiben privat gespeichert; Nutzer teilt sie aktiv.
-- Die App ist ein **experimenteller Prototyp** (v0.2.0); noch nicht auf echter Hardware getestet.
+- Der v0.4-Begehungsdienst ist ein ausdrücklich gestarteter Vordergrunddienst mit Benachrichtigung; der bisherige Messlabor-Log pausiert beim Appwechsel. Kein dauerhafter Handy-Speicherzugriff. Logs bleiben privat gespeichert; Nutzer teilt sie aktiv.
+- Die App ist ein **experimenteller Prototyp** (v0.4.0); noch nicht auf echter Hardware getestet.
 
 ## Quellcode
 
@@ -129,4 +140,4 @@ Die App zeichnet **nur während geöffneter App** auf; beim Wechsel in den Hinte
 
 ## Versionskonzept
 
-Name und Versionsangabe bewusst eindeutig: `MagnetRute_v0.3` / `0.3.0`. Diese Version hat `versionCode 3`, `versionName '0.3.0'`. Künftige Versionen bekommen eine höhere Versionsnummer.
+Name und Versionsangabe bewusst eindeutig: `MagnetRute_v0.4` / `0.4.0`. Diese Version hat `versionCode 4`, `versionName '0.4.0'`. Künftige Versionen bekommen eine höhere Versionsnummer.

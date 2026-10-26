@@ -154,8 +154,15 @@ public final class MainActivity extends Activity implements SensorEventListener,
         LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(14),dp(14),dp(14),dp(30));sv.addView(root);
         TextView title=label("MagnetRute",26,TEXT,true);add(root,title,1);
-        TextView subtitle=label("v0.3.0  •  Virtuelle Wünschelrute & Magnetfeld-Labor",12,SUB,false);
+        TextView subtitle=label("v0.4.0  •  Virtuelle Wünschelrute & Magnetfeld-Labor",12,SUB,false);
         add(root,subtitle,12);
+        LinearLayout navigation=row();
+        Button mapButton=button("Karte",MINT);
+        mapButton.setOnClickListener(v -> startActivity(new Intent(this,SurveyActivity.class)));
+        navigation.addView(mapButton,rowWeight());
+        Button surveyButton=button("Begehungen / Einstellungen",0xffc4d3e5);
+        surveyButton.setOnClickListener(v -> startActivity(new Intent(this,SurveyActivity.class).putExtra("screen","Aufzeichnungen")));
+        navigation.addView(surveyButton,rowWeight());add(root,navigation,8);
         Button plans=button("Grundriss-Scanner öffnen",MINT);
         plans.setOnClickListener(v -> startActivity(new Intent(this,PlanActivity.class)));
         add(root,plans,12);
@@ -194,6 +201,7 @@ public final class MainActivity extends Activity implements SensorEventListener,
         sensitivityBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar bar,int v,boolean fromUser) {
                 sensitivity=.5+v*.1;
+                if(fromUser) SurveyService.sensitivity(MainActivity.this,sensitivity);
                 sensitivityText.setText("Empfindlichkeit: " + fmt(sensitivity) + " µT für vollen Ausschlag");
                 graph.setThreshold(sensitivity);
             }
@@ -307,9 +315,25 @@ public final class MainActivity extends Activity implements SensorEventListener,
         recorder.event(byUser?"REFERENZ_MANUELL":"REFERENZ_AUTO",
             "total_uT="+fmt(baseline[0])+"; vertical_uT="+fmt(baseline[1])+
             "; horizontal_uT="+fmt(baseline[2]));
+        if(byUser) SurveyService.reference(this);
         if(byUser) Toast.makeText(this,"Referenz gesetzt (Mittelwert der letzten 3 s)",Toast.LENGTH_SHORT).show();
     }
     private void toggleRecording() {
+        // The offline project recorder is independent of the displayed Activity.
+        String projectId=getSharedPreferences("survey-ui",MODE_PRIVATE).getString("projectId","");
+        if(!projectId.isEmpty()) {
+            SurveyService.recover(this);
+            if("recording".equals(SurveyService.snapshot().state)) SurveyService.pause(this);
+            else if(checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED) {
+                if(("paused".equals(SurveyService.snapshot().state)||"recovered".equals(SurveyService.snapshot().state)) && projectId.equals(SurveyService.snapshot().projectId)) SurveyService.resume(this);
+                else SurveyService.start(this,projectId);
+            } else {
+                startActivity(new Intent(this,SurveyActivity.class));
+                Toast.makeText(this,"Standort für die Begehung auf der Karte freigeben.",Toast.LENGTH_LONG).show();return;
+            }
+            Toast.makeText(this,"Begehung wird unabhängig von der Ansicht gespeichert; Stopp / Export auf der Karte.",Toast.LENGTH_LONG).show();
+            return;
+        }
         if(recorder.isRecording()) {
             recorder.stop();
             getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -357,7 +381,7 @@ public final class MainActivity extends Activity implements SensorEventListener,
             intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.setType("application/zip");
             String stamp=new SimpleDateFormat("yyyyMMdd_HHmmss",Locale.US).format(new Date());
-            intent.putExtra(Intent.EXTRA_TITLE,"MagnetRute_v0.3_Log_"+stamp+".zip");
+            intent.putExtra(Intent.EXTRA_TITLE,"MagnetRute_v0.4_Log_"+stamp+".zip");
             startActivityForResult(intent,ZIP_SAVE_REQUEST);
         } catch(Exception e) {
             Toast.makeText(this,"Speichern: "+e.getMessage(),Toast.LENGTH_LONG).show();
@@ -386,7 +410,7 @@ public final class MainActivity extends Activity implements SensorEventListener,
             Intent send=new Intent(Intent.ACTION_SEND);
             send.setType("application/zip");
             send.putExtra(Intent.EXTRA_STREAM,LogExportProvider.URI);
-            send.putExtra(Intent.EXTRA_SUBJECT,"MagnetRute v0.3 Messlog");
+            send.putExtra(Intent.EXTRA_SUBJECT,"MagnetRute v0.4 Messlog");
             send.setClipData(ClipData.newRawUri("MagnetRute_Log.zip",LogExportProvider.URI));
             send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             startActivity(Intent.createChooser(send,"Log teilen (z.B. ChatGPT, Drive, Mail)"));

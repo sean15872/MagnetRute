@@ -19,12 +19,12 @@ Die Namen enthalten App-Version, Laufnummer, Wiederholungsnummer und kurzen
 Commit-Hash, zum Beispiel:
 
 ```text
-MagnetRute_v0.3.0_debug_42.1_abcdef0.apk
-MagnetRute_v0.3.0_debug_42.1_abcdef0.apk.sha256
+MagnetRute_v0.4.0_debug_42.1_abcdef0.apk
+MagnetRute_v0.4.0_debug_42.1_abcdef0.apk.sha256
 ```
 
 Die Version wird aus `app/build.gradle` über `:app:printVersion` gelesen.
-Ein Tag `v0.3.0` muss dazu passen; bei abweichenden `v*`-Tags schlägt der Lauf fehl.
+Ein Tag `v0.4.0` muss dazu passen; bei abweichenden `v*`-Tags schlägt der Lauf fehl.
 Der Workflow erstellt Download-Artefakte, keine GitHub Releases. Die Artefakte
 werden für 30 Tage gespeichert (organisationsweite GitHub-Limits können dies
 verkürzen). Den APK-Download daher für eine längerfristige Sicherung lokal ablegen.
