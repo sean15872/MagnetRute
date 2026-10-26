@@ -4,7 +4,7 @@ package at.andi.magnetrute;
 public final class GpsQuality {
     public static final long MAX_AGE_NS = 5_000_000_000L;
     public static final double DEFAULT_ACCURACY_METERS = 10;
-    public static final double MAX_WALK_SPEED_METERS_PER_SECOND = 12;
+    public static final double MAX_WALK_SPEED_METERS_PER_SECOND = 3.5;
     public static final double MAX_NETWORK_ACCURACY_METERS = 50;
 
     public static final class Fix {
@@ -30,6 +30,7 @@ public final class GpsQuality {
     }
 
     private Fix accepted;
+    private Fix candidate;
     private boolean gap = true;
 
     /**
@@ -50,6 +51,24 @@ public final class GpsQuality {
             return reject(fix, "network_accuracy");
         if (fix.accuracy > maxAccuracy) return reject(fix, "accuracy");
         if (fix.speed > MAX_WALK_SPEED_METERS_PER_SECOND) return reject(fix, "speed");
+        // The first GPS fix after a cold acquisition may be displaced by tens
+        // of metres, even when the reported accuracy is deceptively small.
+        // Use two mutually compatible fixes to initialize a walking segment.
+        if (accepted == null) {
+            if (candidate == null || fix.elapsedNs <= candidate.elapsedNs ||
+                    fix.elapsedNs - candidate.elapsedNs > MAX_AGE_NS) {
+                candidate=fix;
+                return reject(fix,"gps_acquiring");
+            }
+            double elapsed=(fix.elapsedNs-candidate.elapsedNs)/1_000_000_000.0;
+            double moved=GeoMath.distance(candidate.lat,candidate.lon,fix.lat,fix.lon);
+            if (moved>candidate.accuracy+fix.accuracy+elapsed*MAX_WALK_SPEED_METERS_PER_SECOND) {
+                candidate=fix;
+                return reject(fix,"gps_acquiring");
+            }
+            candidate=null;accepted=fix;gap=false;
+            return new Decision(fix,true,"accepted",true);
+        }
 
         if (accepted != null && fix.elapsedNs <= accepted.elapsedNs) return reject(fix, "non_monotonic_fix");
         boolean stalePrevious = accepted == null || fix.elapsedNs - accepted.elapsedNs > MAX_AGE_NS;
@@ -74,7 +93,7 @@ public final class GpsQuality {
     }
 
     /** Pause/resume and reference-session boundaries must explicitly break a track. */
-    public synchronized void reset() { accepted = null; gap = true; }
+    public synchronized void reset() { accepted = null; candidate = null; gap = true; }
 
     private Decision reject(Fix fix, String reason) {
         gap = true;
