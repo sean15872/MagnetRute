@@ -168,8 +168,8 @@ public final class SurveyActivity extends Activity implements LocationListener {
         Button lab=button(tabs,"Messung",()->startActivity(new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)));
         Button maps=button(tabs,"Karte",()->showScreen("Karte"));
         Button records=button(tabs,"Verlauf",()->showScreen("Aufzeichnungen"));
-        Button settings=button(tabs,"⚙",()->showScreen("Einstellungen"));
-        weighted(lab,1);weighted(maps,1);weighted(records,1);weighted(settings,.35f>0?1:1);
+        Button settings=button(tabs,"Einstellungen",()->showScreen("Einstellungen"));
+        weighted(lab,1);weighted(maps,1);weighted(records,1);weighted(settings,2);
         Button active="Karte".equals(screen)?maps:"Aufzeichnungen".equals(screen)?records:"Einstellungen".equals(screen)?settings:lab;
         prominent(active,0xff266d86);
         root.addView(tabs);
@@ -273,7 +273,7 @@ public final class SurveyActivity extends Activity implements LocationListener {
         Button search=button(controls,"⌕ Ort suchen",this::searchPlaces);
         Button gps=button(controls,"◎ GPS",this::locate);
         Button more=button(controls,"⋯ Mehr",this::mapMenu);
-        weighted(search,1.5f>0?2:2);weighted(gps,1);weighted(more,1);
+        weighted(search,2);weighted(gps,1);weighted(more,1);
         FrameLayout.LayoutParams bar=new FrameLayout.LayoutParams(-1,dp(62),Gravity.TOP);
         bar.setMargins(dp(10),dp(10),dp(10),0);stage.addView(controls,bar);
 
@@ -296,7 +296,7 @@ public final class SurveyActivity extends Activity implements LocationListener {
             done.setText("Fertig");prominent(done,0xff19816b);
             Button undo=button(editActions,"↶ Zurück",()->{if(!editPoints.isEmpty()){editPoints.remove(editPoints.size()-1);refreshEditing();}});
             Button cancel=button(editActions,"Abbrechen",()->{editType=null;editingId=null;editPoints.clear();showScreen("Karte");});
-            weighted(done,1.4f>0?2:2);weighted(undo,1);weighted(cancel,1);
+            weighted(done,2);weighted(undo,1);weighted(cancel,1);
             sheet.addView(editActions);
         } else if(project==null || project.optJSONObject("geometry")==null) {
             Button begin=button(sheet,"+ Grundstück einzeichnen",()->{
@@ -322,7 +322,7 @@ public final class SurveyActivity extends Activity implements LocationListener {
             stopButton=button(actions,"Stopp",()->{SurveyService.stop(this);handler.postDelayed(()->showScreen("Karte"),450);});
             prominent(stopButton,0xffaa3647);weighted(stopButton,1);
             Button mark=button(actions,"+ Marker",this::gpsMarker);
-            prominent(mark,0xff2a6195);weighted(mark,1.4f>0?2:2);
+            prominent(mark,0xff2a6195);weighted(mark,2);
             sheet.addView(actions);
         }
         FrameLayout.LayoutParams bottom=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);
@@ -656,7 +656,7 @@ public final class SurveyActivity extends Activity implements LocationListener {
         EditText accuracy=number(fields,"Maximale GPS-Genauigkeit (m)",String.valueOf(SurveyService.snapshot().maxAccuracy));
         EditText sensitivity=number(fields,"Empfindlichkeit / Schwelle (µT)",String.valueOf(SurveyService.snapshot().sensitivity));
         EditText cell=number(fields,"Heatmap-Zellgröße (m, mindestens GPS-Unsicherheit)",String.valueOf(prefs.getFloat("cell",10)));
-        EditText opacity=number(fields,"Deckkraft (0–1)",String.valueOf(prefs.getFloat("opacity",.55f)));
+        EditText opacity=number(fields,"Deckkraft (0–1)",String.valueOf(prefs.getFloat("opacity",.35f)));
         EditText scale=number(fields,"Differenz-Skala ±µT",String.valueOf(prefs.getFloat("scale",10)));
         EditText absolute=number(fields,"Absolute Skala 0 bis µT",String.valueOf(prefs.getFloat("absoluteScale",100)));
         EditText threshold=number(fields,"Heatmap-Mindestwert / Betrag (µT)",String.valueOf(prefs.getFloat("heatThreshold",0)));
