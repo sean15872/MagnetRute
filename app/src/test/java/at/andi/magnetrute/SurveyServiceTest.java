@@ -118,6 +118,7 @@ public class SurveyServiceTest {
         assertTrue(store.samples(session).get(0).isNull("fix"));assertNull(SurveyService.snapshot().fix);
         service.onLocationChanged(location(47.1,14.1,4));
         assertFalse(store.fixes(session).get(1).getBoolean("accepted")); // first stable-looking fix awaits confirmation
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1));
         service.onLocationChanged(location(47.1,14.1,4));sample(30,0,0);
         assertTrue(store.fixes(session).get(2).getBoolean("accepted"));
         assertEquals(47.1,store.samples(session).get(1).getJSONObject("fix").getDouble("lat"),0);
@@ -155,6 +156,7 @@ public class SurveyServiceTest {
     @Test public void explicitPassBoundaryChangesAggregationGroupWithoutGpsGapOrRawChanges() throws Exception {
         start();service.onAccuracyChanged(magnet,3);String session=SurveyService.snapshot().sessionId;
         service.onLocationChanged(location(47.1,14.1,4));
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1));
         service.onLocationChanged(location(47.1,14.1,4));sample(3,4,12);
         SurveyService.newPass(context);drain();sample(3,4,12);
         List<JSONObject> samples=store.samples(session);
