@@ -1,9 +1,8 @@
-
 name: MagnetRute Android APK
 
 on:
   push:
-    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -12,6 +11,7 @@ permissions:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -21,10 +21,16 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v4
+      - uses: android-actions/setup-android@v3
+        with:
+          # Known Java 17-compatible SDK manager; avoid a moving latest CLI.
+          cmdline-tools-version: '11479570'
+          # The legacy SDK package "tools" no longer exists in Google's repository.
+          packages: 'platform-tools'
+          log-accepted-android-sdk-licenses: false
 
       - name: Android SDK installieren
-        run: sdkmanager --install 'platforms;android-35' 'build-tools;35.0.0'
+        run: sdkmanager --install 'platforms;android-35' 'build-tools;34.0.0' 'build-tools;35.0.0'
 
       - uses: gradle/actions/setup-gradle@v4
         with:
@@ -33,11 +39,42 @@ jobs:
       - name: Tests
         run: bash tests/run_tests.sh
 
-      - name: APK bauen
-        run: gradle --no-daemon --stacktrace :app:assembleDebug
+      - name: Lint und Debug-APK bauen
+        run: gradle --no-daemon --stacktrace :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+
+      - name: Versionierte APK vorbereiten
+        id: apk
+        shell: bash
+        env:
+          BUILD_SHA: ${{ github.sha }}
+          BUILD_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          VERSION=$(gradle --no-daemon --console=plain -q :app:printVersion)
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]
+          if [[ "$BUILD_REF" == refs/tags/v* && "$BUILD_REF" != "refs/tags/v$VERSION" ]]; then
+            echo 'Der Versions-Tag stimmt nicht mit app/build.gradle überein.' >&2
+            exit 1
+          fi
+          NAME="MagnetRute_v${VERSION}_debug_${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}_${BUILD_SHA:0:7}"
+          mkdir -p artifacts
+          cp app/build/outputs/apk/debug/app-debug.apk "artifacts/$NAME.apk"
+          (cd artifacts && sha256sum "$NAME.apk" > "$NAME.apk.sha256")
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
 
       - name: APK bereitstellen
         uses: actions/upload-artifact@v4
         with:
-          name: MagnetRute_v0.2.0_APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: ${{ steps.apk.outputs.name }}
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Lint-Berichte bereitstellen
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-${{ github.run_number }}-${{ github.run_attempt }}
+          path: app/build/reports/lint-results-debug.*
+          if-no-files-found: ignore
+          retention-days: 30

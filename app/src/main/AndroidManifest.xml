@@ -5,7 +5,7 @@
     <uses-feature android:name="android.hardware.location" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.compass" android:required="false" />
     <application
-        android:label="MagnetRute v0.2"
+        android:label="MagnetRute v0.3"
         android:icon="@drawable/ic_launcher"
         android:allowBackup="false"
         android:theme="@android:style/Theme.Material.NoActionBar"
@@ -18,6 +18,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name=".PlanActivity" android:exported="false"
+            android:configChanges="orientation|screenSize" />
+        <provider android:name=".PlanCaptureProvider"
+            android:authorities="at.andi.magnetrute.capture"
+            android:exported="false" android:grantUriPermissions="true" />
         <provider
             android:name=".LogExportProvider"
             android:authorities="at.andi.magnetrute.export"
