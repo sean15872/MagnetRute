@@ -7,13 +7,15 @@ public final class GpsQualityTest {
         GpsQuality quality=new GpsQuality();
         GpsQuality.Fix first=fix(47,14,4,T,"gps");
         GpsQuality.Decision a=quality.inspect(first,T,10);
-        check(a.accepted&&a.breakTrack,"first fix starts segment");
-        check(quality.current(T)==first,"current preserves original fix");
-        check(quality.current(T+GpsQuality.MAX_AGE_NS)==first,"five second inclusive age");
+        rejection(a,"gps_acquiring");
+        check(quality.current(T)==null,"first inaccurate acquisition does not advertise GPS");
+        check(quality.current(T+GpsQuality.MAX_AGE_NS)==null,"acquiring fix is not a live location");
         check(quality.current(T+GpsQuality.MAX_AGE_NS+1)==null,"stale current not advertised");
         check(quality.current(T-1)==null,"fix cannot precede a sensor timestamp");
         GpsQuality.Fix second=fix(47.00001,14,4,T+1_000_000_000L,"gps");
-        check(quality.inspect(second,second.elapsedNs,10).accepted,"normal walking fix accepted");
+        check(quality.inspect(second,second.elapsedNs,10).accepted,"second mutually compatible GPS fix accepted");
+        check(quality.current(second.elapsedNs)==second,"accepted fix is the second stable reading");
+        check(quality.current(second.elapsedNs+GpsQuality.MAX_AGE_NS)==second,"five second inclusive age");
         GpsQuality.Fix poorNetwork=fix(48,15,900,T+2_000_000_000L,"network");
         rejection(quality.inspect(poorNetwork,poorNetwork.elapsedNs,1000),"network_accuracy");
         check(quality.current(poorNetwork.elapsedNs)==second,"rejection never replaces current good fix");
@@ -46,13 +48,15 @@ public final class GpsQualityTest {
         quality.reset();
         check(quality.current(T)==null,"reset clears obsolete fix");
         a=quality.inspect(fix(48,15,4,T,"gps"),T,10);
-        check(a.accepted&&a.breakTrack,"reset starts independent session elsewhere");
+        rejection(a,"gps_acquiring");
+        a=quality.inspect(fix(48.000001,15,4,T+1_000_000_000L,"gps"),T+1_000_000_000L,10);
+        check(a.accepted&&a.breakTrack,"reset starts independent session after stabilization");
         quality.reset();
         quality.inspect(fix(47,14,4,T,"gps"),T,10);
         a=quality.inspect(fix(47.0001,14,4,T+10_000_000_000L,"gps"),T+10_000_000_000L,10);
-        check(a.accepted&&a.breakTrack,"good fix after signal gap accepted without joining line");
+        rejection(a,"gps_acquiring");
         GpsQuality.Fix network=fix(47.0001,14,5,T+11_000_000_000L,"network");
-        check(quality.inspect(network,network.elapsedNs,10).accepted,"accurate network fix is not discarded solely by name");
+        check(quality.inspect(network,network.elapsedNs,10).accepted,"accurate network fix stabilizes pending GPS acquisition");
         System.out.println("GpsQuality: "+checks+" checks OK");
     }
     private static GpsQuality.Fix fix(double lat,double lon,double accuracy,long time,String provider) {

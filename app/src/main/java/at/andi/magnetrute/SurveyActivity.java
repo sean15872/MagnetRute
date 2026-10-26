@@ -7,6 +7,8 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.Color;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
@@ -16,7 +18,9 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.text.InputType;
 import android.view.View;
+import android.view.Gravity;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.EditText;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
@@ -58,11 +62,11 @@ public final class SurveyActivity extends Activity implements LocationListener {
     private final GpsQuality locateQuality=new GpsQuality();
     private LocationManager locations;
     private boolean locating,pendingLocate,onlinePreparation,following=true,lineWalking,comparison;
-    private boolean polygons=true,markers=true,lines=true,path=true,heat=true,base=true,busy;
+    private boolean polygons=true,markers=true,lines=true,path=true,heat=false,base=true,busy;
     private String screen="Karte",editType,editingId,photoFeature,pendingPermission,jobStatus="";
     private final List<double[]> editPoints=new ArrayList<>();
     private final Set<String> selectedSessions=new HashSet<>();
-    private String heatMode="delta";
+    private String heatMode="off";
     private long lastRefresh;
     private List<JSONObject> cachedSamples=new ArrayList<>();
 
@@ -91,16 +95,42 @@ public final class SurveyActivity extends Activity implements LocationListener {
             try { JSONArray a=new JSONArray(saved.getString("editPoints","[]"));for(int i=0;i<a.length();i++)editPoints.add(new double[]{a.getJSONArray(i).getDouble(0),a.getJSONArray(i).getDouble(1)}); }catch(Exception ignored) { editPoints.clear();editType=null; }
         }
         // A cold start always uses local tiles; preparation must be explicitly re-enabled.
-        heatMode=prefs.getString("heatMode","delta");polygons=prefs.getBoolean("polygons",true);markers=prefs.getBoolean("markers",true);lines=prefs.getBoolean("lines",true);path=prefs.getBoolean("path",true);heat=prefs.getBoolean("heat",true);base=prefs.getBoolean("base",true);following=prefs.getBoolean("follow",true);
+        heatMode=prefs.getString("heatMode","off");polygons=prefs.getBoolean("polygons",true);markers=prefs.getBoolean("markers",true);lines=prefs.getBoolean("lines",true);path=prefs.getBoolean("path",true);heat=prefs.getBoolean("heat",false);base=prefs.getBoolean("base",true);following=prefs.getBoolean("follow",true);
+        if(!prefs.getBoolean("v042MapDefaults",false)){
+            heatMode="off";heat=false;
+            prefs.edit().putBoolean("v042MapDefaults",true).apply();
+        }
         if(saved==null)screen=getIntent().getStringExtra("screen")==null?"Karte":getIntent().getStringExtra("screen");
         onlinePreparation=false;showScreen(screen);verifyPackage();
     }
     private TextView label(String value,int size) { TextView t=new TextView(this);t.setAutoLinkMask(android.text.util.Linkify.WEB_URLS);t.setText(value);t.setMovementMethod(android.text.method.LinkMovementMethod.getInstance());t.setTextColor(prefs.getBoolean("light",false)?0xff15243b:0xffeaf3ff);t.setTextSize(size);t.setPadding(dp(5),dp(3),dp(5),dp(3));return t; }
     private Button button(LinearLayout parent,String value,Runnable action) {
-        Button b=new Button(this);b.setAllCaps(false);b.setText(value);b.setTextSize(13);
-        b.setOnClickListener(v -> { if(!busy) try { action.run(); } catch(Exception e) { error(e); } });parent.addView(b);return b;
+        Button b=new Button(this);
+        b.setAllCaps(false);b.setText(value);b.setTextSize(13);b.setTextColor(0xffeef6ff);
+        b.setPadding(dp(10),0,dp(10),0);
+        b.setMinHeight(dp(44));
+        GradientDrawable shape=new GradientDrawable();
+        shape.setColor(0xff25334c);
+        shape.setCornerRadius(dp(13));
+        shape.setStroke(dp(1),0xff354962);
+        b.setBackground(shape);
+        b.setOnClickListener(v -> { if(!busy) try { action.run(); } catch(Exception e) { error(e); } });
+        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-2,dp(44));p.setMargins(dp(3),dp(2),dp(3),dp(2));
+        parent.addView(b,p);return b;
     }
-    private LinearLayout row(LinearLayout parent) { HorizontalScrollView sv=new HorizontalScrollView(this);LinearLayout r=new LinearLayout(this);sv.addView(r);parent.addView(sv);return r; }
+    private LinearLayout row(LinearLayout parent) {
+        HorizontalScrollView sv=new HorizontalScrollView(this);
+        sv.setHorizontalScrollBarEnabled(false);
+        LinearLayout r=new LinearLayout(this);sv.addView(r);parent.addView(sv);return r;
+    }
+    private void roundedPanel(LinearLayout panel,int color,int radius) {
+        GradientDrawable b=new GradientDrawable();
+        b.setColor(color);b.setCornerRadius(dp(radius));panel.setBackground(b);
+    }
+    private void weighted(Button b,int weight) {
+        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(46),weight);
+        p.setMargins(dp(3),dp(3),dp(3),dp(3));b.setLayoutParams(p);
+    }
     private void error(Exception e) { if(!isDestroyed())new AlertDialog.Builder(this).setTitle("Vorgang nicht möglich").setMessage(e.getMessage()==null?"Bitte Eingaben und Datei prüfen.":e.getMessage()).setPositiveButton("OK",null).show(); }
     private void info(String message) { new AlertDialog.Builder(this).setMessage(message).setPositiveButton("OK",null).show(); }
     private String projectId() { return project==null?null:project.optString("id"); }
@@ -131,19 +161,29 @@ public final class SurveyActivity extends Activity implements LocationListener {
 
     private void showScreen(String value) {
         screen=value;map=null;recordButton=null;stopButton=null;legend=null;stageHint=null;
-        root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(prefs.getBoolean("light",false)?0xffeef4f7:0xff0a1020);
-        LinearLayout tabs=row(root);
-        button(tabs,"Messung",() -> { startActivity(new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)); });
-        button(tabs,"Karte",() -> showScreen("Karte"));button(tabs,"Aufzeichnungen",() -> showScreen("Aufzeichnungen"));button(tabs,"Einstellungen",() -> showScreen("Einstellungen"));
-        status=label("MagnetRute v0.4.0 · Offline-Kartierung",12);root.addView(status);
-        content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);root.addView(content,new LinearLayout.LayoutParams(-1,0,1));setContentView(root);
-        if("Karte".equals(screen)) showMap();else if("Aufzeichnungen".equals(screen)) showRecords();else showSettings();
+        root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(0xff0a1423);
+        LinearLayout tabs=new LinearLayout(this);tabs.setGravity(Gravity.CENTER_VERTICAL);
+        tabs.setPadding(dp(5),dp(3),dp(5),dp(3));tabs.setBackgroundColor(0xff121f32);
+        Button lab=button(tabs,"Messung",()->startActivity(new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)));
+        Button maps=button(tabs,"Karte",()->showScreen("Karte"));
+        Button records=button(tabs,"Verlauf",()->showScreen("Aufzeichnungen"));
+        Button settings=button(tabs,"Einstellungen",()->showScreen("Einstellungen"));
+        weighted(lab,1);weighted(maps,1);weighted(records,1);weighted(settings,2);
+        Button active="Karte".equals(screen)?maps:"Aufzeichnungen".equals(screen)?records:"Einstellungen".equals(screen)?settings:lab;
+        prominent(active,0xff266d86);
+        root.addView(tabs);
+        status=label("MagnetRute",12);
+        if(!"Karte".equals(screen))root.addView(status);
+        content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);
+        root.addView(content,new LinearLayout.LayoutParams(-1,0,1));setContentView(root);
+        if("Karte".equals(screen))showMap();else if("Aufzeichnungen".equals(screen))showRecords();else showSettings();
         lastRefresh=0;refresh();
     }
-
     private void prominent(Button b,int color) {
-        b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(color));
-        b.setTextColor(0xffffffff);b.setTextSize(16);b.setMinHeight(dp(52));
+        GradientDrawable shape=new GradientDrawable();
+        shape.setColor(color);shape.setCornerRadius(dp(14));
+        b.setBackground(shape);b.setTextColor(0xffffffff);b.setTextSize(15);b.setMinHeight(dp(48));
     }
     private String mapGuide() {
         if("Polygon".equals(editType))return "Grundstück: "+editPoints.size()+" Eckpunkte gesetzt. Auf die Karte tippen (mindestens 3), dann Fertig.";
@@ -200,19 +240,16 @@ public final class SurveyActivity extends Activity implements LocationListener {
         }).show();
     }
     private void showMap() {
-        controls=row(content);
-        button(controls,"Ort suchen",this::searchPlaces);
-        button(controls,"Standort holen",this::locate);
-        if(!onlinePreparation && (project==null || !project.optBoolean("offlineReady")))
-            button(controls,"Luftbild laden",this::activateOnlinePreview);
-        button(controls,"Mehr ⋯",this::mapMenu);
+        FrameLayout stage=new FrameLayout(this);
+        content.addView(stage,new LinearLayout.LayoutParams(-1,0,1));
 
         map=new OfflineMapView(this);
         JSONObject shown=project==null?
             obj("latitude",prefs.getFloat("browseLat",47.2f),"longitude",prefs.getFloat("browseLon",14.3f),
                 "zoom",prefs.getInt("browseZoom",7),"source",OfflineTiles.BASEMAP_ORTHO):project;
         boolean offline=(project!=null&&project.optBoolean("offlineReady")) || !onlinePreparation;
-        map.setProject(shown,project==null?null:mapFile(project),offline);map.setFollow(following);
+        map.setProject(shown,project==null?null:mapFile(project),offline);
+        map.setFollow(following);
         map.setListener(new OfflineMapView.Listener() {
             @Override public void tap(double lat,double lon) { mapTap(lat,lon); }
             @Override public void longPress(double lat,double lon) { selectFeature(lat,lon); }
@@ -221,44 +258,76 @@ public final class SurveyActivity extends Activity implements LocationListener {
             }
             @Override public void viewport(double lat,double lon,int zoom,float rotation) {
                 if(project!=null) {
-                    put(project,"latitude",lat);put(project,"longitude",lon);put(project,"zoom",zoom);put(project,"rotation",rotation);
+                    put(project,"latitude",lat);put(project,"longitude",lon);
+                    put(project,"zoom",zoom);put(project,"rotation",rotation);
                     handler.removeCallbacks(saveViewport);handler.postDelayed(saveViewport,500);
                 } else prefs.edit().putFloat("browseLat",(float)lat).putFloat("browseLon",(float)lon).putInt("browseZoom",zoom).apply();
             }
         });
-        content.addView(map,new LinearLayout.LayoutParams(-1,0,1));
-        stageHint=label(mapGuide(),13);content.addView(stageHint);
-        legend=label("Keine Messwerte auf der Karte · Ansicht nach erster Aufnahme umschalten",11);content.addView(legend);
+        stage.addView(map,new FrameLayout.LayoutParams(-1,-1));
+
+        // Only three prominent map tools: search, GPS, additional actions.
+        controls=new LinearLayout(this);controls.setGravity(Gravity.CENTER_VERTICAL);
+        controls.setPadding(dp(5),dp(5),dp(5),dp(5));
+        roundedPanel(controls,0xf10e1d31,18);
+        Button search=button(controls,"⌕ Ort suchen",this::searchPlaces);
+        Button gps=button(controls,"◎ GPS",this::locate);
+        Button more=button(controls,"⋯ Mehr",this::mapMenu);
+        weighted(search,2);weighted(gps,1);weighted(more,1);
+        FrameLayout.LayoutParams bar=new FrameLayout.LayoutParams(-1,dp(62),Gravity.TOP);
+        bar.setMargins(dp(10),dp(10),dp(10),0);stage.addView(controls,bar);
+
+        // Controls float over the map instead of consuming half the map's height.
+        LinearLayout sheet=new LinearLayout(this);sheet.setOrientation(LinearLayout.VERTICAL);
+        sheet.setPadding(dp(10),dp(9),dp(10),dp(9));
+        roundedPanel(sheet,0xf40e1b2e,20);
+        status.setTextSize(12);status.setMaxLines(2);sheet.addView(status);
+        stageHint=label(mapGuide(),13);stageHint.setMaxLines(2);sheet.addView(stageHint);
+        legend=label("",11);sheet.addView(legend);
+        TextView attribution=label(project!=null&&OfflineTiles.GIS_STMK.equals(project.optString("source"))?
+            "Luftbild: Land Steiermark · Karte & GPS können abweichen":
+            "Luftbild: basemap.at · Karte & GPS können abweichen",10);
+        sheet.addView(attribution);
 
         if(editType!=null) {
-            LinearLayout editingActions=row(content);
-            Button save=button(editingActions,"Fertig",() -> {finishEdit();if(editType==null)showScreen("Karte");});
-            prominent(save,0xff228367);
-            button(editingActions,"Letzten Punkt zurück",()->{if(!editPoints.isEmpty()){editPoints.remove(editPoints.size()-1);refreshEditing();}});
-            button(editingActions,"Abbrechen",()->{editType=null;editingId=null;editPoints.clear();showScreen("Karte");});
+            LinearLayout editActions=new LinearLayout(this);
+            Button done=button(editActions,"✓ Fertig",()->{finishEdit();if(editType==null)showScreen("Karte");});
+            // Keep testable button name consistent with the existing UI tests.
+            done.setText("Fertig");prominent(done,0xff19816b);
+            Button undo=button(editActions,"↶ Zurück",()->{if(!editPoints.isEmpty()){editPoints.remove(editPoints.size()-1);refreshEditing();}});
+            Button cancel=button(editActions,"Abbrechen",()->{editType=null;editingId=null;editPoints.clear();showScreen("Karte");});
+            weighted(done,2);weighted(undo,1);weighted(cancel,1);
+            sheet.addView(editActions);
         } else if(project==null || project.optJSONObject("geometry")==null) {
-            Button begin=button(content,"+ Grundstück einzeichnen",()-> {
+            Button begin=button(sheet,"+ Grundstück einzeichnen",()->{
                 if(project==null)newProject();
                 else {beginEdit("Polygon",projectId());showScreen("Karte");}
-            });
-            prominent(begin,0xff218268);
+            });prominent(begin,0xff19816b);
+            begin.setLayoutParams(new LinearLayout.LayoutParams(-1,dp(48)));
         } else if(!project.optBoolean("offlineReady")) {
-            Button save=button(content,"Offline-Karte herunterladen",this::downloadDialog);
-            prominent(save,0xff218268);
+            Button save=button(sheet,"Offline-Karte herunterladen",this::downloadDialog);
+            prominent(save,0xff19816b);
+            save.setLayoutParams(new LinearLayout.LayoutParams(-1,dp(48)));
         } else {
-            LinearLayout views=row(content);
-            button(views,"Karte",()->{base=true;heatMode="off";heat=false;path=true;lastRefresh=0;refresh();});
-            button(views,"Messspur",()->{base=true;heatMode="track";heat=false;path=true;lastRefresh=0;refresh();});
-            button(views,"Heatmap",()->{base=true;heatMode="delta";heat=true;path=true;lastRefresh=0;refresh();});
-            button(views,"Ebenen",this::layersDialog);
-            LinearLayout actions=row(content);
-            recordButton=button(actions,"Messung starten",this::toggleRecord);
-            prominent(recordButton,0xff218268);
+            LinearLayout views=new LinearLayout(this);
+            Button baseButton=button(views,"Karte",()->{base=true;heatMode="off";heat=false;path=true;lastRefresh=0;showScreen("Karte");});
+            Button trackButton=button(views,"Spur",()->{base=true;heatMode="track";heat=false;path=true;lastRefresh=0;showScreen("Karte");});
+            Button heatButton=button(views,"Heatmap",()->{base=true;heatMode="delta";heat=true;path=true;lastRefresh=0;showScreen("Karte");});
+            weighted(baseButton,1);weighted(trackButton,1);weighted(heatButton,1);
+            prominent("delta".equals(heatMode)?heatButton:"track".equals(heatMode)?trackButton:baseButton,0xff226d83);
+            sheet.addView(views);
+            LinearLayout actions=new LinearLayout(this);
+            recordButton=button(actions,"Aufnahme starten",this::toggleRecord);
+            prominent(recordButton,0xff19816b);weighted(recordButton,2);
             stopButton=button(actions,"Stopp",()->{SurveyService.stop(this);handler.postDelayed(()->showScreen("Karte"),450);});
-            prominent(stopButton,0xffaf3441);
-            Button mark=button(content,"+ Markierung",this::gpsMarker);
-            prominent(mark,0xff2364a5);
+            prominent(stopButton,0xffaa3647);weighted(stopButton,1);
+            Button mark=button(actions,"+ Marker",this::gpsMarker);
+            prominent(mark,0xff2a6195);weighted(mark,2);
+            sheet.addView(actions);
         }
+        FrameLayout.LayoutParams bottom=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);
+        bottom.setMargins(dp(9),0,dp(9),dp(12));
+        stage.addView(sheet,bottom);
         refreshEditing();
     }
     private final Runnable saveViewport=() -> { if(!isDestroyed())try {saveViewportState();}catch(Exception e){error(e);} };
@@ -347,7 +416,7 @@ public final class SurveyActivity extends Activity implements LocationListener {
         LinearLayout fields=new LinearLayout(this);fields.setOrientation(LinearLayout.VERTICAL);
         EditText buffer=number(fields,"Rand in Metern",project.optString("downloadBuffer","30"));
         EditText min=number(fields,"Kleinster Zoom (Übersicht)",project.optString("downloadMinZoom","14"));
-        EditText max=number(fields,"Größter Zoom (Detail)",project.optString("downloadMaxZoom","19"));
+        EditText max=number(fields,"Größter Zoom (Detail)",project.optString("downloadMaxZoom","20"));
         AlertDialog d=new AlertDialog.Builder(this).setTitle("Offline-Kartenpaket planen").setView(fields).setNegativeButton("Abbrechen",null).setPositiveButton("Berechnen",null).create();
         d.setOnShowListener(v -> d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(w -> {
             try {
@@ -587,7 +656,7 @@ public final class SurveyActivity extends Activity implements LocationListener {
         EditText accuracy=number(fields,"Maximale GPS-Genauigkeit (m)",String.valueOf(SurveyService.snapshot().maxAccuracy));
         EditText sensitivity=number(fields,"Empfindlichkeit / Schwelle (µT)",String.valueOf(SurveyService.snapshot().sensitivity));
         EditText cell=number(fields,"Heatmap-Zellgröße (m, mindestens GPS-Unsicherheit)",String.valueOf(prefs.getFloat("cell",10)));
-        EditText opacity=number(fields,"Deckkraft (0–1)",String.valueOf(prefs.getFloat("opacity",.55f)));
+        EditText opacity=number(fields,"Deckkraft (0–1)",String.valueOf(prefs.getFloat("opacity",.35f)));
         EditText scale=number(fields,"Differenz-Skala ±µT",String.valueOf(prefs.getFloat("scale",10)));
         EditText absolute=number(fields,"Absolute Skala 0 bis µT",String.valueOf(prefs.getFloat("absoluteScale",100)));
         EditText threshold=number(fields,"Heatmap-Mindestwert / Betrag (µT)",String.valueOf(prefs.getFloat("heatThreshold",0)));
@@ -660,7 +729,12 @@ public final class SurveyActivity extends Activity implements LocationListener {
             features.add(obj("id","comparison-"+consistent,"name",String.format(Locale.GERMANY,"Wiederholt Δ %.2f µT · Streuung %.2f · %d Durchgänge",c.median,c.spread,c.independentPasses),"type","Vergleich","color","#ffb24c","geometry",obj("type","Point","coordinates",coord(c.lon,c.lat))));}
             map.setFeatures(features);compare=" · "+consistent+" Zellen wiederholt ähnlich (keine Objekterkennung)";}
         int maxPasses=0;for(FieldGrid.Cell c:map.displayedCells())maxPasses=Math.max(maxPasses,c.passes);
-        if(legend!=null)legend.setText(displayed+" Begehungen · "+map.displayedCells().size()+" Heatmap-Zellen · "+bounds+(comparison?compare:"")+(windowed?" · Datenfenster aktiv":""));
+        if(legend!=null) {
+            boolean show="delta".equals(heatMode)||"absolute".equals(heatMode)||"abs-delta".equals(heatMode);
+            legend.setVisibility(show?View.VISIBLE:View.GONE);
+            if(show)legend.setText(map.displayedCells().size()+" Messzellen · "+bounds+
+                (comparison?compare:"")+(windowed?" · Datenfenster aktiv":""));
+        }
     }
     private List<JSONObject> windowTrack(List<JSONObject> samples) {
         List<JSONObject> result=new ArrayList<>();long previous=-1;String segment="";boolean gap=true;

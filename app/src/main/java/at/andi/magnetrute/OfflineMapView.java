@@ -71,7 +71,7 @@ public final class OfflineMapView extends View {
     private JSONObject project=new JSONObject();
     private String source="basemap-ortho",attribution="Datenquelle: basemap.at";
     private double latitude=47.1457,longitude=14.0328;
-    private int zoom=18,minZoom=0,maxZoom=19;
+    private int zoom=18,minZoom=0,maxZoom=20;
     private static final int MAX_VISUAL_ZOOM=22;
     private float rotation;
     private float pinchAngle;
@@ -154,7 +154,7 @@ public final class OfflineMapView extends View {
         project=value;source=nextSource;offlineActive=offline;
         attribution=value.optString("attribution",source.equals("gis-stmk")?
             "Datenquelle: CC-BY-4.0: Land Steiermark - data.steiermark.gv.at":"Datenquelle: basemap.at");
-        minZoom=0;maxZoom=19;
+        minZoom=0;maxZoom=20;
         synchronized(tileLock) {
             if(localTiles==null && mapFile!=null && mapFile.isFile()) {
                 try { localTiles=new OfflineTiles(mapFile); } catch(Exception ignored) { }
@@ -163,7 +163,7 @@ public final class OfflineMapView extends View {
                 try {
                     JSONObject metadata=localTiles.metadata();
                     minZoom=metadata.optInt("minZoom",metadata.optInt("minzoom",0));
-                    maxZoom=metadata.optInt("maxZoom",metadata.optInt("maxzoom",19));
+                    maxZoom=metadata.optInt("maxZoom",metadata.optInt("maxzoom",20));
                     if(attribution.isEmpty()) attribution=metadata.optString("attribution",attribution);
                 } catch(Exception ignored) { }
             }
