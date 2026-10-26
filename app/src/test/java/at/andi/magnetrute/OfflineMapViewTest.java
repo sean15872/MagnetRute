@@ -95,6 +95,18 @@ public final class OfflineMapViewTest {
         map.setZoom(19);draw(map).recycle();idleTiles(map);assertEquals(0,calls.get());
     }
 
+    @Test public void manualZoomUpTo22PreservesGeoreferencingWithoutNewProviderRequests() throws Exception {
+        AtomicInteger calls=new AtomicInteger();OfflineMapView map=view(calls);
+        map.setProject(project("overzoom"),offlinePackage(),true);
+        map.setZoom(22);
+        assertEquals(22,map.currentZoom());
+        float[] point=map.screenPoint(lat+.00001,lon+.00001);
+        double[] recovered=map.coordinateAt(point[0],point[1]);
+        assertEquals(lat+.00001,recovered[0],1e-8);assertEquals(lon+.00001,recovered[1],1e-8);
+        draw(map).recycle();idleTiles(map);
+        assertEquals("Digitale Vergrößerung darf offline keine neuen Online-Kacheln abrufen",0,calls.get());
+    }
+
     @Test public void previewIsExplicitAndOfflineSwitchRemovesRemoteFallback() throws Exception {
         AtomicInteger calls=new AtomicInteger();OfflineMapView map=view(calls);map.setProject(project("preparation"),null,false);
         draw(map).recycle();idleTiles(map);assertTrue(calls.get()>0);
