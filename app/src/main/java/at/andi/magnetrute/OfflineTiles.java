@@ -71,8 +71,8 @@ public final class OfflineTiles implements AutoCloseable {
         sourceCheck(source);
         if(polygonRingLonLat==null || polygonRingLonLat.length()<3 || polygonRingLonLat.length()>1000
                 || !Double.isFinite(bufferMeters) || bufferMeters<0 || bufferMeters>1000
-                || minZoom<0 || maxZoom>19 || minZoom>maxZoom)
-            throw new IllegalArgumentException("Polygon, Rand oder Zoomstufen sind ungültig (Zoom 0–19, Rand 0–1000 m).");
+                || minZoom<0 || maxZoom>20 || minZoom>maxZoom)
+            throw new IllegalArgumentException("Polygon, Rand oder Zoomstufen sind ungültig (Zoom 0–20, Rand 0–1000 m).");
         double west=180,east=-180,south=90,north=-90;
         try {
             for(int i=0;i<polygonRingLonLat.length();i++) {
@@ -123,7 +123,7 @@ public final class OfflineTiles implements AutoCloseable {
 
     /** Missing or damaged tiles return null; no remote fallback is performed. XYZ input, TMS storage. */
     public synchronized Bitmap get(int z,int x,int y) {
-        if(z<0 || z>19 || x<0 || y<0 || x>=(1<<z) || y>=(1<<z)) return null;
+        if(z<0 || z>20 || x<0 || y<0 || x>=(1<<z) || y>=(1<<z)) return null;
         try {
             byte[] data=verified(db,new Tile(z,x,y));
             return data==null?null:BitmapFactory.decodeByteArray(data,0,data.length);
@@ -224,7 +224,7 @@ public final class OfflineTiles implements AutoCloseable {
             if(!p.optBoolean("ready")) return false;
             String source=p.getString("source");sourceCheck(source);
             JSONArray b=p.getJSONArray("bounds");int min=p.getInt("minZoom"),max=p.getInt("maxZoom");
-            if(min<0 || max>19 || min>max || b.length()!=4) return false;
+            if(min<0 || max>20 || min>max || b.length()!=4) return false;
             double west=b.getDouble(0),south=b.getDouble(1),east=b.getDouble(2),north=b.getDouble(3);
             if(!GeoMath.valid(south,west) || !GeoMath.valid(north,east) || west>=east || south>=north) return false;
             List<Tile> planned=enumerate(west,south,east,north,min,max);
@@ -237,7 +237,7 @@ public final class OfflineTiles implements AutoCloseable {
 
     public static String previewUrl(String source,int z,int x,int y) {
         sourceCheck(source);
-        if(z<0 || z>19 || x<0 || y<0 || x>=(1<<z) || y>=(1<<z)) throw new IllegalArgumentException("Ungültige Kartenkachel.");
+        if(z<0 || z>20 || x<0 || y<0 || x>=(1<<z) || y>=(1<<z)) throw new IllegalArgumentException("Ungültige Kartenkachel.");
         if(GIS_STMK.equals(source)) {
             double span=2*Math.PI*GeoMath.EARTH_RADIUS_METERS/(1<<z),origin=Math.PI*GeoMath.EARTH_RADIUS_METERS;
             double left=-origin+x*span,right=left+span,top=origin-y*span,bottom=top-span;
