@@ -7,6 +7,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.Handler;
 import android.os.Looper;
@@ -71,6 +72,7 @@ public final class OfflineMapView extends View {
     private String source="basemap-ortho",attribution="Datenquelle: basemap.at";
     private double latitude=47.1457,longitude=14.0328;
     private int zoom=18,minZoom=0,maxZoom=19;
+    private static final int MAX_VISUAL_ZOOM=22;
     private float rotation;
     private float pinchAngle;
     private boolean rotating,follow=true,showBase=true;
@@ -146,7 +148,7 @@ public final class OfflineMapView extends View {
             synchronized(pending) { pending.clear(); }
             latitude=validLatitude(value.optDouble("latitude",latitude));
             longitude=validLongitude(value.optDouble("longitude",longitude));
-            zoom=Math.max(0,Math.min(19,value.optInt("zoom",zoom)));
+            zoom=Math.max(0,Math.min(MAX_VISUAL_ZOOM,value.optInt("zoom",zoom)));
             rotation=normalizeRotation((float)value.optDouble("rotation",0));
         }
         project=value;source=nextSource;offlineActive=offline;
@@ -202,6 +204,10 @@ public final class OfflineMapView extends View {
         latitude=validLatitude(lat);longitude=lon;notifyViewport();invalidate();
     }
     public void setZoom(int value) { changeZoom(value,getWidth()/2f,getHeight()/2f); }
+    public double currentLatitude() { return latitude; }
+    public double currentLongitude() { return longitude; }
+    public int currentZoom() { return zoom; }
+    public float currentRotation() { return rotation; }
     public void rotateBy(float value) { if(Float.isFinite(value)) { rotation=normalizeRotation(rotation+value);notifyViewport();invalidate(); } }
     public void setLayers(boolean polygonLayer,boolean markerLayer,boolean lineLayer,boolean pathLayer,boolean heatLayer) {
         polygons=polygonLayer;markers=markerLayer;lines=lineLayer;trackLayer=pathLayer;heatmap=heatLayer;invalidate();
@@ -281,14 +287,22 @@ public final class OfflineMapView extends View {
         for(int row=firstY;row<=lastY;row++) for(int column=firstX;column<=lastX;column++) {
             if(row<0 || row>=count) continue;
             int x=((column%count)+count)%count;
-            String key=generation+"/"+zoom+"/"+x+"/"+row;
+            // Digital magnification uses downloaded source tiles; it does not add detail.
+            int nativeZoom=Math.min(zoom,maxZoom);
+            int over=zoom-nativeZoom;
+            int parentX=x>>over,parentY=row>>over;
+            String key=generation+"/"+nativeZoom+"/"+parentX+"/"+parentY;
             Bitmap tile=tileCache.get(key);
             float left=(float)(column*256.0-center[0]),top=(float)(row*256.0-center[1]);
-            if(tile!=null && !tile.isRecycled()) canvas.drawBitmap(tile,null,new RectF(left,top,left+256,top+256),paint);
-            else {
+            if(tile!=null && !tile.isRecycled()) {
+                int divisor=1<<over,offsetX=x&(divisor-1),offsetY=row&(divisor-1);
+                int sx=(int)Math.floor(offsetX*256.0/divisor),sy=(int)Math.floor(offsetY*256.0/divisor);
+                int ex=(int)Math.ceil((offsetX+1)*256.0/divisor),ey=(int)Math.ceil((offsetY+1)*256.0/divisor);
+                canvas.drawBitmap(tile,new Rect(sx,sy,Math.min(256,Math.max(sx+1,ex)),Math.min(256,Math.max(sy+1,ey))),new RectF(left,top,left+256,top+256),paint);
+            } else {
                 absent=true;paint.setColor(0xff233149);canvas.drawRect(left,top,left+256,top+256,paint);
                 paint.setColor(0xff34435b);canvas.drawRect(left,top,left+128,top+128,paint);canvas.drawRect(left+128,top+128,left+256,top+256,paint);
-                requestTile(key,zoom,x,row);
+                requestTile(key,nativeZoom,parentX,parentY);
             }
         }
         canvas.restore();return absent;
@@ -449,7 +463,7 @@ public final class OfflineMapView extends View {
         paint.setStyle(Paint.Style.FILL);paint.setColor(0xdd0a1020);canvas.drawRect(0,getHeight()-dp(40),getWidth(),getHeight(),paint);
         label(canvas,attribution.isEmpty()?"Datenquelle unbekannt":attribution,dp(5),getHeight()-dp(23),Color.WHITE);
         boolean available; synchronized(tileLock) { available=localTiles!=null; }
-        String state=offlineActive?(!available?"Offline · Kartenpaket fehlt":(zoom<minZoom||zoom>maxZoom)?"Offline · Zoom nicht gespeichert":absent?"Offline · Kachel fehlt / außerhalb des Pakets":"Offline · lokale Karte"):
+        String state=offlineActive?(!available?"Offline · Kartenpaket fehlt":zoom>maxZoom?"Offline · digital vergrößert (keine neuen Bilddetails)":zoom<minZoom?"Offline · Zoom nicht gespeichert":absent?"Offline · Kachel fehlt / außerhalb des Pakets":"Offline · lokale Karte"):
             "Online-Vorbereitung · noch keine Offline-Zusage";
         label(canvas,state,dp(5),getHeight()-dp(7),0xffb7cce7);
     }
@@ -514,7 +528,7 @@ public final class OfflineMapView extends View {
         super.onDetachedFromWindow();
     }
     private void changeZoom(int requested,float focusX,float focusY) {
-        int next=Math.max(0,Math.min(19,requested));if(next==zoom) return;
+        int next=Math.max(0,Math.min(MAX_VISUAL_ZOOM,requested));if(next==zoom) return;
         double[] anchor=coordinateAt(focusX,focusY);zoom=next;
         double[] origin=GeoMath.world(anchor[0],anchor[1],zoom);double radians=Math.toRadians(-rotation);
         double dx=focusX-getWidth()/2.0,dy=focusY-getHeight()/2.0;
