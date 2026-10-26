@@ -165,11 +165,15 @@ public final class SurveyActivity extends Activity implements LocationListener {
         root.setBackgroundColor(0xff0a1423);
         LinearLayout tabs=new LinearLayout(this);tabs.setGravity(Gravity.CENTER_VERTICAL);
         tabs.setPadding(dp(5),dp(3),dp(5),dp(3));tabs.setBackgroundColor(0xff121f32);
-        Button lab=button(tabs,"Messung",()->startActivity(new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)));
+        Button lab=button(tabs,"Messen",()->startActivity(new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)));
         Button maps=button(tabs,"Karte",()->showScreen("Karte"));
         Button records=button(tabs,"Verlauf",()->showScreen("Aufzeichnungen"));
         Button settings=button(tabs,"Einstellungen",()->showScreen("Einstellungen"));
         weighted(lab,1);weighted(maps,1);weighted(records,1);weighted(settings,2);
+        for(Button tab:new Button[]{lab,maps,records,settings}) {
+            tab.setSingleLine(true);
+            tab.setAutoSizeTextTypeUniformWithConfiguration(10,15,1,android.util.TypedValue.COMPLEX_UNIT_SP);
+        }
         Button active="Karte".equals(screen)?maps:"Aufzeichnungen".equals(screen)?records:"Einstellungen".equals(screen)?settings:lab;
         prominent(active,0xff266d86);
         root.addView(tabs);
