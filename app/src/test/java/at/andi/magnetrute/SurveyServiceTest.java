@@ -116,8 +116,10 @@ public class SurveyServiceTest {
         assertFalse(store.fixes(session).get(0).getBoolean("accepted"));
         assertEquals(900,store.fixes(session).get(0).getDouble("accuracy"),0);
         assertTrue(store.samples(session).get(0).isNull("fix"));assertNull(SurveyService.snapshot().fix);
+        service.onLocationChanged(location(47.1,14.1,4));
+        assertFalse(store.fixes(session).get(1).getBoolean("accepted")); // first stable-looking fix awaits confirmation
         service.onLocationChanged(location(47.1,14.1,4));sample(30,0,0);
-        assertTrue(store.fixes(session).get(1).getBoolean("accepted"));
+        assertTrue(store.fixes(session).get(2).getBoolean("accepted"));
         assertEquals(47.1,store.samples(session).get(1).getJSONObject("fix").getDouble("lat"),0);
         Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(6));sample(30,0,0);
         assertTrue(store.samples(session).get(2).isNull("fix"));assertNull(SurveyService.snapshot().fix);
@@ -152,13 +154,14 @@ public class SurveyServiceTest {
 
     @Test public void explicitPassBoundaryChangesAggregationGroupWithoutGpsGapOrRawChanges() throws Exception {
         start();service.onAccuracyChanged(magnet,3);String session=SurveyService.snapshot().sessionId;
+        service.onLocationChanged(location(47.1,14.1,4));
         service.onLocationChanged(location(47.1,14.1,4));sample(3,4,12);
         SurveyService.newPass(context);drain();sample(3,4,12);
         List<JSONObject> samples=store.samples(session);
         assertEquals(2,samples.size());assertNotEquals(samples.get(0).getString("passId"),samples.get(1).getString("passId"));
         assertEquals(13,samples.get(0).getDouble("total"),0);assertEquals(13,samples.get(1).getDouble("total"),0);
         assertEquals(samples.get(0).getJSONObject("fix").getLong("elapsedNs"),samples.get(1).getJSONObject("fix").getLong("elapsedNs"));
-        assertEquals(1,store.fixes(session).size());
+        assertEquals(2,store.fixes(session).size());
         assertTrue(store.events(session).stream().anyMatch(e->"NEUER_DURCHGANG".equals(e.optString("name"))));
     }
 }
