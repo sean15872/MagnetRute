@@ -52,8 +52,8 @@ public final class SurveyActivity extends Activity implements LocationListener {
     private JSONObject project;
     private OfflineMapView map;
     private LinearLayout root,content,controls;
-    private TextView status,legend;
-    private Button recordButton;
+    private TextView status,legend,stageHint;
+    private Button recordButton,stopButton;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final GpsQuality locateQuality=new GpsQuality();
     private LocationManager locations;
@@ -130,7 +130,7 @@ public final class SurveyActivity extends Activity implements LocationListener {
     private File mapFile(JSONObject p) { return new File(new File(getFilesDir(),"offline-maps"),p.optString("mapPath","missing.mbtiles")); }
 
     private void showScreen(String value) {
-        screen=value;map=null;recordButton=null;legend=null;
+        screen=value;map=null;recordButton=null;stopButton=null;legend=null;stageHint=null;
         root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(prefs.getBoolean("light",false)?0xffeef4f7:0xff0a1020);
         LinearLayout tabs=row(root);
         button(tabs,"Messung",() -> { startActivity(new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)); });
@@ -140,24 +140,78 @@ public final class SurveyActivity extends Activity implements LocationListener {
         if("Karte".equals(screen)) showMap();else if("Aufzeichnungen".equals(screen)) showRecords();else showSettings();
         lastRefresh=0;refresh();
     }
+
+    private void prominent(Button b,int color) {
+        b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(color));
+        b.setTextColor(0xffffffff);b.setTextSize(16);b.setMinHeight(dp(52));
+    }
+    private String mapGuide() {
+        if("Polygon".equals(editType))return "Grundstück: "+editPoints.size()+" Eckpunkte gesetzt. Auf die Karte tippen (mindestens 3), dann Fertig.";
+        if("LineString".equals(editType))return "Linie: Eckpunkte auf der Karte setzen, danach Fertig wählen.";
+        if("Point".equals(editType))return "Auf die Karte tippen, um die Markierung zu setzen.";
+        if(project==null)return "1/3  Ort suchen oder Standort holen. Luftbild laden und Karte zoomen; danach Grundstück einzeichnen.";
+        if(project.optJSONObject("geometry")==null)return "2/3  Grundstück auf der Karte durch Antippen der Ecken einzeichnen.";
+        if(!project.optBoolean("offlineReady"))return "3/3  Fläche gespeichert. Jetzt den Luftbildausschnitt für die Offline-Nutzung herunterladen.";
+        return "Offline bereit. Aufnahme starten, beim Gehen Markierungen setzen oder zur Heatmap wechseln.";
+    }
+    private void activateOnlinePreview() {
+        if(project!=null&&project.optBoolean("offlineReady")) {
+            info("Diese Fläche ist offline gespeichert. Für einen anderen Ort bitte unter Mehr ein neues Grundstück anlegen.");
+            return;
+        }
+        new AlertDialog.Builder(this).setTitle("Luftbild online anzeigen?")
+            .setMessage("Nur Kartenkacheln für die gewählte Ansicht werden vom Kartenanbieter geladen. Messwerte bleiben lokal. Später kannst du den Grundstücksausschnitt offline speichern.")
+            .setNegativeButton("Abbrechen",null).setPositiveButton("Karte laden",(d,w)-> {
+                onlinePreparation=true;
+                if(map!=null) {
+                    JSONObject shown=project==null?obj("latitude",map.currentLatitude(),"longitude",map.currentLongitude(),"zoom",map.currentZoom(),"rotation",map.currentRotation(),"source",OfflineTiles.BASEMAP_ORTHO):project;
+                    map.setProject(shown,project==null?null:mapFile(project),false);
+                    map.refreshTiles();
+                }
+                if(stageHint!=null)stageHint.setText(mapGuide());
+                jobStatus="Online-Luftbild aktiv. Nach dem Einzeichnen Offline-Karte speichern.";
+            }).show();
+    }
+    private void mapMenu() {
+        String[] names={"Meine Grundstücke", "Neues Grundstück", "Kartenquelle auswählen",
+            "Offline-Karte speichern", "Grundstück bearbeiten", "Markierung auf Karte setzen",
+            "Drainage / Leitung einzeichnen", "Drainagelinie mitgehen", "Ansicht / Heatmap",
+            "Ebenen ein-/ausblenden", "GPS-Nachführung umschalten", "Neuer Messdurchgang",
+            "Referenz setzen", "Aufzeichnungen", "Einstellungen"};
+        new AlertDialog.Builder(this).setTitle("Weitere Kartenfunktionen").setItems(names,(d,n)->{
+            switch(n) {
+                case 0: chooseProject();break;
+                case 1: newProject();break;
+                case 2: sourceDialog();break;
+                case 3: downloadDialog();break;
+                case 4: if(requireProject()){beginEdit("Polygon",projectId());showScreen("Karte");}break;
+                case 5: if(requireProject()){editType="Point";editingId=null;editPoints.clear();showScreen("Karte");}break;
+                case 6: if(requireProject()){beginEdit("LineString",null);showScreen("Karte");}break;
+                case 7: walkingLine();break;
+                case 8: viewDialog();break;
+                case 9: layersDialog();break;
+                case 10: if(map!=null){following=!map.isFollowing();map.setFollow(following);}break;
+                case 11: SurveyService.newPass(this);break;
+                case 12: SurveyService.reference(this);break;
+                case 13: showScreen("Aufzeichnungen");break;
+                case 14: showScreen("Einstellungen");break;
+                default:break;
+            }
+        }).show();
+    }
     private void showMap() {
         controls=row(content);
-        button(controls,"Grundstücke",this::chooseProject);button(controls,"Neue Fläche (online)",this::newProject);
-        button(controls,"Adresse / Ort",this::searchPlaces);button(controls,"Standort holen",this::locate);
-        button(controls,"Kartenquelle",this::sourceDialog);button(controls,"Offline speichern",this::downloadDialog);
-        button(controls,"Download pausieren",() -> { if(download!=null)download.pause=true; });
-        button(controls,"Polygon",() -> beginEdit("Polygon",project==null?null:project.optString("id")));
-        button(controls,"Linie",() -> beginEdit("LineString",null));button(controls,"Punkt auf Karte",() -> { if(requireProject()){editType="Point";editingId=null;editPoints.clear();jobStatus="Auf Karte tippen, um eine Markierung zu setzen.";} });
-        button(controls,"Punkt entfernen",this::removePoint);button(controls,"Abschließen",this::finishEdit);
-        button(controls,"Bearbeiten abbrechen",() -> { editType=null;editingId=null;editPoints.clear();refreshEditing(); });
-        button(controls,"Ebenen",this::layersDialog);button(controls,"Ansicht",this::viewDialog);
-        button(controls,"+",() -> map.setZoom(project==null?15:project.optInt("zoom",15)+1));
-        button(controls,"−",() -> map.setZoom(project==null?13:project.optInt("zoom",15)-1));
-        button(controls,"Drehen 15°",() -> map.rotateBy(15));
-        button(controls,"GPS mitführen",() -> { following=!map.isFollowing();map.setFollow(following);jobStatus=following?"GPS-Mitführung an":"GPS-Mitführung aus"; });
+        button(controls,"Ort suchen",this::searchPlaces);
+        button(controls,"Standort holen",this::locate);
+        if(!onlinePreparation && (project==null || !project.optBoolean("offlineReady")))
+            button(controls,"Luftbild laden",this::activateOnlinePreview);
+        button(controls,"Mehr ⋯",this::mapMenu);
+
         map=new OfflineMapView(this);
-        JSONObject shown=project==null?obj("latitude",47.2,"longitude",14.3,"zoom",7,"source",OfflineTiles.BASEMAP_ORTHO):project;
-        boolean offline=project==null || project.optBoolean("offlineReady") || !onlinePreparation;
+        JSONObject shown=project==null?
+            obj("latitude",prefs.getFloat("browseLat",47.2f),"longitude",prefs.getFloat("browseLon",14.3f),
+                "zoom",prefs.getInt("browseZoom",7),"source",OfflineTiles.BASEMAP_ORTHO):project;
+        boolean offline=(project!=null&&project.optBoolean("offlineReady")) || !onlinePreparation;
         map.setProject(shown,project==null?null:mapFile(project),offline);map.setFollow(following);
         map.setListener(new OfflineMapView.Listener() {
             @Override public void tap(double lat,double lon) { mapTap(lat,lon); }
@@ -166,22 +220,45 @@ public final class SurveyActivity extends Activity implements LocationListener {
                 if(index>=0&&index<editPoints.size()){editPoints.set(index,new double[]{lon,lat});refreshEditing();}
             }
             @Override public void viewport(double lat,double lon,int zoom,float rotation) {
-                if(project!=null){put(project,"latitude",lat);put(project,"longitude",lon);put(project,"zoom",zoom);put(project,"rotation",rotation);handler.removeCallbacks(saveViewport);handler.postDelayed(saveViewport,500);}
+                if(project!=null) {
+                    put(project,"latitude",lat);put(project,"longitude",lon);put(project,"zoom",zoom);put(project,"rotation",rotation);
+                    handler.removeCallbacks(saveViewport);handler.postDelayed(saveViewport,500);
+                } else prefs.edit().putFloat("browseLat",(float)lat).putFloat("browseLon",(float)lon).putInt("browseZoom",zoom).apply();
             }
         });
         content.addView(map,new LinearLayout.LayoutParams(-1,0,1));
-        TextView attribution=label("Datenquelle: basemap.at · https://basemap.at/",11);
-        attribution.setAutoLinkMask(android.text.util.Linkify.WEB_URLS);
-        attribution.setText(project!=null&&OfflineTiles.GIS_STMK.equals(project.optString("source"))?
-            "Datenquelle: CC-BY-4.0: Land Steiermark · https://data.steiermark.gv.at/":"Datenquelle: basemap.at · https://basemap.at/");
-        attribution.setMovementMethod(android.text.method.LinkMovementMethod.getInstance());content.addView(attribution);
-        legend=label("Blau niedrig · Rot hoch · nur gemessene Zellen; Luftbildauflösung ≠ GPS-Genauigkeit",11);content.addView(legend);
-        LinearLayout actions=row(content);recordButton=button(actions,"Messung starten",this::toggleRecord);
-        button(actions,"Pause",() -> SurveyService.pause(this));button(actions,"Stopp",() -> SurveyService.stop(this));
-        button(actions,"Referenz setzen",() -> SurveyService.reference(this));
-        button(actions,"Linie mitgehen",this::walkingLine);button(actions,"Vergleich",() -> {comparison=!comparison;lastRefresh=0;refresh();});
-        button(actions,"Neuer Durchgang",() -> SurveyService.newPass(this));
-        Button mark=button(content,"+ Markierung",this::gpsMarker);mark.setTextSize(18);mark.setMinHeight(dp(56));
+        stageHint=label(mapGuide(),13);content.addView(stageHint);
+        legend=label("Keine Messwerte auf der Karte · Ansicht nach erster Aufnahme umschalten",11);content.addView(legend);
+
+        if(editType!=null) {
+            LinearLayout editingActions=row(content);
+            Button save=button(editingActions,"Fertig",() -> {finishEdit();if(editType==null)showScreen("Karte");});
+            prominent(save,0xff228367);
+            button(editingActions,"Letzten Punkt zurück",()->{if(!editPoints.isEmpty()){editPoints.remove(editPoints.size()-1);refreshEditing();}});
+            button(editingActions,"Abbrechen",()->{editType=null;editingId=null;editPoints.clear();showScreen("Karte");});
+        } else if(project==null || project.optJSONObject("geometry")==null) {
+            Button begin=button(content,"+ Grundstück einzeichnen",()-> {
+                if(project==null)newProject();
+                else {beginEdit("Polygon",projectId());showScreen("Karte");}
+            });
+            prominent(begin,0xff218268);
+        } else if(!project.optBoolean("offlineReady")) {
+            Button save=button(content,"Offline-Karte herunterladen",this::downloadDialog);
+            prominent(save,0xff218268);
+        } else {
+            LinearLayout views=row(content);
+            button(views,"Karte",()->{base=true;heatMode="off";heat=false;path=true;lastRefresh=0;refresh();});
+            button(views,"Messspur",()->{base=true;heatMode="track";heat=false;path=true;lastRefresh=0;refresh();});
+            button(views,"Heatmap",()->{base=true;heatMode="delta";heat=true;path=true;lastRefresh=0;refresh();});
+            button(views,"Ebenen",this::layersDialog);
+            LinearLayout actions=row(content);
+            recordButton=button(actions,"Messung starten",this::toggleRecord);
+            prominent(recordButton,0xff218268);
+            stopButton=button(actions,"Stopp",()->{SurveyService.stop(this);handler.postDelayed(()->showScreen("Karte"),450);});
+            prominent(stopButton,0xffaf3441);
+            Button mark=button(content,"+ Markierung",this::gpsMarker);
+            prominent(mark,0xff2364a5);
+        }
         refreshEditing();
     }
     private final Runnable saveViewport=() -> { if(!isDestroyed())try {saveViewportState();}catch(Exception e){error(e);} };
@@ -193,14 +270,12 @@ public final class SurveyActivity extends Activity implements LocationListener {
         }).setNeutralButton("Projekt sichern / importieren",(d,w) -> showScreen("Aufzeichnungen")).setNegativeButton("Schließen",null).show();
     }
     private void newProject() {
-        new AlertDialog.Builder(this).setTitle("Online-Vorbereitung öffnen?").setMessage("Kartenkacheln werden für den sichtbaren Ausschnitt online angezeigt. Erst ein vollständig gespeichertes Paket ist offline bereit. Bestehende Projekte bleiben erhalten.")
-            .setNegativeButton("Abbrechen",null).setPositiveButton("Vorbereiten",(d,w) -> {
-                double lat=project==null?47.2:project.optDouble("latitude",47.2),lon=project==null?14.3:project.optDouble("longitude",14.3);
-                int zoom=project==null?7:project.optInt("zoom",16);
-                project=obj("id",id(),"name","Neue Messfläche","latitude",lat,"longitude",lon,"zoom",zoom,"rotation",0,
-                    "source",OfflineTiles.BASEMAP_ORTHO,"offlineReady",false,"attribution","Datenquelle: basemap.at");
-                onlinePreparation=true;selectedSessions.clear();saveProject();showScreen("Karte");beginEdit("Polygon",projectId());
-            }).show();
+        double lat=map==null?47.2:map.currentLatitude(),lon=map==null?14.3:map.currentLongitude();
+        int zoom=map==null?7:map.currentZoom();
+        project=obj("id",id(),"name","Neues Grundstück","latitude",lat,"longitude",lon,"zoom",zoom,"rotation",0,
+            "source",OfflineTiles.BASEMAP_ORTHO,"offlineReady",false,"attribution","Datenquelle: basemap.at");
+        onlinePreparation=true;selectedSessions.clear();saveProject();
+        beginEdit("Polygon",projectId());showScreen("Karte");
     }
     private void beginEdit(String type,String existing) {
         if(!requireProject())return;
@@ -208,9 +283,9 @@ public final class SurveyActivity extends Activity implements LocationListener {
         editType=type;editingId=existing;editPoints.clear();
         JSONObject g="Polygon".equals(type)?project.optJSONObject("geometry"):null;
         if(g!=null) try {JSONArray ring=g.getJSONArray("coordinates").getJSONArray(0);for(int i=0;i<ring.length()-1;i++)editPoints.add(new double[]{ring.getJSONArray(i).getDouble(0),ring.getJSONArray(i).getDouble(1)});}catch(Exception e){error(e);}
-        jobStatus="Polygon".equals(type)?"Flächenecken antippen, Griffe ziehen, dann Abschließen.":"Linienpunkte antippen, Griffe ziehen, dann Abschließen.";refreshEditing();
+        jobStatus="Polygon".equals(type)?"Flächenecken antippen, danach Fertig wählen.":"Linienpunkte antippen, danach Fertig wählen.";refreshEditing();
     }
-    private void refreshEditing() { if(map!=null)map.setEditing(editPoints,"Polygon".equals(editType)); }
+    private void refreshEditing() { if(map!=null)map.setEditing(editPoints,"Polygon".equals(editType));if(stageHint!=null)stageHint.setText(mapGuide()); }
     private void mapTap(double lat,double lon) {
         if(editType==null){selectFeature(lat,lon);return;}
         if("Point".equals(editType)){
@@ -234,7 +309,7 @@ public final class SurveyActivity extends Activity implements LocationListener {
             JSONObject geometry=obj("type","Polygon","coordinates",new JSONArray().put(editRing(true)));
             askText("Fläche benennen",project.optString("name"),name -> {put(project,"name",name);
                 if(!geometry.toString().equals(String.valueOf(project.optJSONObject("geometry"))))put(project,"offlineReady",false);
-                put(project,"geometry",geometry);saveProject();editType=null;editingId=null;editPoints.clear();refreshEditing();jobStatus="Fläche gespeichert. Offline speichern prüft das Kartenpaket für den gewählten Ausschnitt.";});
+                put(project,"geometry",geometry);saveProject();editType=null;editingId=null;editPoints.clear();refreshEditing();jobStatus="Fläche gespeichert. Jetzt das Luftbild offline herunterladen.";showScreen("Karte");});
         } else if("Point".equals(editType)&&editingId!=null&&!editPoints.isEmpty()) {
             JSONObject feature=findFeature(editingId);put(feature,"geometry",obj("type","Point","coordinates",coord(editPoints.get(0)[0],editPoints.get(0)[1])));
             put(feature,"correctedUnixMs",System.currentTimeMillis());store.putFeature(feature);editType=null;editingId=null;editPoints.clear();refreshEditing();lastRefresh=0;
@@ -410,13 +485,27 @@ public final class SurveyActivity extends Activity implements LocationListener {
         store.putFeature(draft);
     }
     private void searchPlaces() {
-        LinearLayout fields=new LinearLayout(this);fields.setOrientation(LinearLayout.VERTICAL);EditText query=new EditText(this);query.setSingleLine();query.setHint("Adresse oder Ort suchen");fields.addView(query);
-        boolean offline=project!=null&&project.optBoolean("offlineReady")||!onlinePreparation;
-        new AlertDialog.Builder(this).setTitle(offline?"Gespeicherte Orte (offline)":"Adresse oder Ort suchen").setView(fields)
-            .setNegativeButton("Abbrechen",null).setNeutralButton("Gespeicherte Orte",(d,w) -> showPlaces(PlaceSearch.history(this)))
-            .setPositiveButton(offline?"Offline suchen":"Online suchen",(d,w) -> async(() -> {
-                List<JSONObject> places=PlaceSearch.search(getApplicationContext(),query.getText().toString(),offline);return () -> showPlaces(places);
-            })).show();
+        LinearLayout fields=new LinearLayout(this);fields.setOrientation(LinearLayout.VERTICAL);
+        EditText query=new EditText(this);query.setSingleLine();query.setHint("z. B. Rinegg 69, 8853 Ranten");fields.addView(query);
+        boolean savedOnly=project!=null&&project.optBoolean("offlineReady");
+        new AlertDialog.Builder(this).setTitle("Ort oder Adresse finden").setView(fields)
+            .setNegativeButton("Abbrechen",null)
+            .setNeutralButton("Gespeicherte Orte",(d,w)->showPlaces(PlaceSearch.history(this)))
+            .setPositiveButton(savedOnly?"Gespeicherte suchen":"Online suchen",(d,w)->{
+                // Only this explicit action authorizes online preview/search for a new area.
+                if(!savedOnly) {
+                    onlinePreparation=true;
+                    if(map!=null) {
+                        JSONObject temporary=project==null?obj("latitude",map.currentLatitude(),"longitude",map.currentLongitude(),
+                            "zoom",map.currentZoom(),"source",OfflineTiles.BASEMAP_ORTHO):project;
+                        map.setProject(temporary,project==null?null:mapFile(project),false);
+                    }
+                }
+                async(()->{
+                    List<JSONObject> places=PlaceSearch.search(getApplicationContext(),query.getText().toString(),savedOnly);
+                    return () -> showPlaces(places);
+                });
+            }).show();
     }
     private void showPlaces(List<JSONObject> places) {
         if(places.isEmpty()){info("Kein gespeicherter/passender Ort. Für die erste Adresssuche Neue Fläche (online) oder Online-Vorbereitung wählen; alternativ Karte manuell positionieren.");return;}
@@ -530,10 +619,28 @@ public final class SurveyActivity extends Activity implements LocationListener {
         }
         boolean liveSample=s.sample!=null&&"recording".equals(s.state)&&SystemClock.elapsedRealtimeNanos()-s.sample.optLong("timestampNs")<2_000_000_000L;
         String live=s.sample==null?"Keine aktuellen Sensorwerte":(liveSample?"":"Letzter Messwert: ")+String.format(Locale.GERMANY,"%.2f µT · Δ %.2f µT · Sensorstatus %d%s",s.sample.optDouble("total"),s.sample.optDouble("delta"),s.sample.optInt("sensorAccuracy",-1),s.sample.optBoolean("uncertain")?" · Kalibrierung unsicher":"");
-        status.setText(title+"\n"+live+" · "+s.state+"\n"+(fix==null?s.gpsStatus:"GPS ±"+Math.round(fix.accuracy)+" m")+(jobStatus.isEmpty()?"":"\n"+jobStatus));
-        if(recordButton!=null)recordButton.setText("recording".equals(s.state)?"Messung pausieren":("paused".equals(s.state)||"recovered".equals(s.state))?"Messung fortsetzen":"Messung starten");
-        if(map==null||project==null)return;
-        map.setLocation(fix);if(fix!=null&&pendingLocate){map.center(fix.lat,fix.lon);pendingLocate=false;}
+        JSONObject row=s.sessionId==null?null:store.session(s.sessionId);
+        long start=row==null?0:row.optLong("startUnixMs",0);
+        long end=row==null?0:row.optLong("endUnixMs",0);
+        boolean stopped="stopped".equals(s.state);
+        long duration=start==0?0:Math.max(0,((stopped&&end>start?end:System.currentTimeMillis())-start)/1000);
+        String time=String.format(Locale.GERMANY,"%02d:%02d",duration/60,duration%60);
+        String recording="recording".equals(s.state)?"● AUFNAHME LÄUFT · "+time:
+            "paused".equals(s.state)?"‖ PAUSIERT · "+time:
+            "recovered".equals(s.state)?"‖ UNTERBROCHEN · "+time:
+            stopped?"■ GESTOPPT · "+time+" insgesamt (inkl. Pausen)":"Keine Aufnahme";
+        status.setText(title+" · "+recording+"\n"+(fix==null?s.gpsStatus:"GPS ±"+Math.round(fix.accuracy)+" m")+
+            (jobStatus.isEmpty()?"":" · "+jobStatus));
+        status.setTextColor("recording".equals(s.state)?0xffff6666:"paused".equals(s.state)?0xffffd36a:0xffcfe4ef);
+        if(recordButton!=null) {
+            boolean active="recording".equals(s.state);
+            recordButton.setText(active?"PAUSE  ‖":("paused".equals(s.state)||"recovered".equals(s.state))?"FORTSETZEN  ▶":"AUFNAHME STARTEN  ●");
+            prominent(recordButton,active?0xffaf3441:0xff218268);
+        }
+        if(stopButton!=null)stopButton.setVisibility(("recording".equals(s.state)||"paused".equals(s.state)||"recovered".equals(s.state))?View.VISIBLE:View.GONE);
+        if(stageHint!=null)stageHint.setText(mapGuide());
+        if(map==null)return;
+        map.setLocation(fix);if(project==null)return;if(fix!=null&&pendingLocate){map.center(fix.lat,fix.lon);pendingLocate=false;}
         if(SystemClock.elapsedRealtime()-lastRefresh<3000)return;lastRefresh=SystemClock.elapsedRealtime();
         ArrayList<JSONObject> features=new ArrayList<>(store.features(projectId()));
         for(JSONObject p:store.projects())if(p.optJSONObject("geometry")!=null)features.add(obj("id",p.optString("id"),"name",p.optString("name"),"type","Fläche","geometry",p.optJSONObject("geometry")));
@@ -553,7 +660,7 @@ public final class SurveyActivity extends Activity implements LocationListener {
             features.add(obj("id","comparison-"+consistent,"name",String.format(Locale.GERMANY,"Wiederholt Δ %.2f µT · Streuung %.2f · %d Durchgänge",c.median,c.spread,c.independentPasses),"type","Vergleich","color","#ffb24c","geometry",obj("type","Point","coordinates",coord(c.lon,c.lat))));}
             map.setFeatures(features);compare=" · "+consistent+" Zellen wiederholt ähnlich (keine Objekterkennung)";}
         int maxPasses=0;for(FieldGrid.Cell c:map.displayedCells())maxPasses=Math.max(maxPasses,c.passes);
-        if(legend!=null)legend.setText("Blau niedrig → Rot hoch · "+bounds+" · "+displayed+" Begehungen"+compare+"\n"+samples.size()+" Rohpunkte · "+map.displayedCells().size()+" belegte Zellen · bis "+maxPasses+" Durchgänge/Zelle · Raster "+prefs.getFloat("cell",10)+" m. Luftbildauflösung ≠ GPS-Genauigkeit"+(windowed?"\nAnzeige/Vergleich nur gewähltes 50.000er-Datenfenster; frühere Daten unter Aufzeichnungen → Datenfenster. Export vollständig.":""));
+        if(legend!=null)legend.setText(displayed+" Begehungen · "+map.displayedCells().size()+" Heatmap-Zellen · "+bounds+(comparison?compare:"")+(windowed?" · Datenfenster aktiv":""));
     }
     private List<JSONObject> windowTrack(List<JSONObject> samples) {
         List<JSONObject> result=new ArrayList<>();long previous=-1;String segment="";boolean gap=true;
