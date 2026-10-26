@@ -58,7 +58,7 @@ public class SurveyActivityTest {
 
     @Test public void coldStartNeverEnablesNetworkAndPolygonPersistsAfterRestart()throws Exception {
         assertTrue(ReflectionHelpers.<Boolean>getField(map(),"offlineActive"));
-        click("Polygon");listener().tap(47.15,14.13);listener().tap(47.15,14.131);listener().tap(47.151,14.131);click("Abschließen");
+        click("+ Grundstück einzeichnen");listener().tap(47.15,14.13);listener().tap(47.15,14.131);listener().tap(47.151,14.131);click("Fertig");
         AlertDialog dialog=ShadowAlertDialog.getLatestAlertDialog();edits(dialog.getWindow().getDecorView()).get(0).setText("Garten Nord");dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick();idle();
         assertEquals("Garten Nord",store.project(pid).getString("name"));assertEquals(4,store.project(pid).getJSONObject("geometry").getJSONArray("coordinates").getJSONArray(0).length());
         controller.pause().stop().destroy();controller=Robolectric.buildActivity(SurveyActivity.class).create().start().resume().visible();activity=controller.get();idle();
@@ -83,7 +83,7 @@ public class SurveyActivityTest {
         String fid=UUID.randomUUID().toString();JSONObject original=object("lat",47.15,"lon",14.13,"accuracy",4,"provider","gps");
         store.putFeature(object("id",fid,"projectId",pid,"name","Eiche","type","Baum","originalGps",original,"geometry",object("type","Point","coordinates",new JSONArray("[14.13,47.15]"))));
         listener().longPress(47.15,14.13);idle();AlertDialog menu=ShadowAlertDialog.getLatestAlertDialog();menu.getListView().performItemClick(null,1,1);idle();
-        listener().pointMoved(0,47.1502,14.1302);click("Abschließen");
+        listener().pointMoved(0,47.1502,14.1302);click("Fertig");
         JSONObject changed=store.features(pid).get(0);assertEquals(47.1502,changed.getJSONObject("geometry").getJSONArray("coordinates").getDouble(1),1e-10);assertEquals(47.15,changed.getJSONObject("originalGps").getDouble("lat"),1e-10);
         File backup=new File(context.getCacheDir(),"ui-project.zip");activity.onActivityResult(4101,Activity.RESULT_OK,new Intent().setData(Uri.fromFile(backup)));await();assertTrue(backup.length()>0);
         activity.onActivityResult(4102,Activity.RESULT_OK,new Intent().setData(Uri.fromFile(backup)));await();assertEquals(2,store.projects().size());assertNotEquals(pid,ReflectionHelpers.<JSONObject>getField(activity,"project").getString("id"));assertEquals(1,store.features(pid).size());
