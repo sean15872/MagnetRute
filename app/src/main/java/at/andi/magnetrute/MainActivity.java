@@ -41,7 +41,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 
-/** MagnetRute v0.1: bewusst Messgeraet, keine automatische Aussage ueber Objekte. */
+/** MagnetRute: bewusst Messgeraet, keine automatische Aussage ueber Objekte. */
 public final class MainActivity extends Activity implements SensorEventListener, LocationListener {
     private static final int ZIP_SAVE_REQUEST = 2001;
     private static final int LOCATION_PERMISSION_REQUEST = 2002;
@@ -154,8 +154,11 @@ public final class MainActivity extends Activity implements SensorEventListener,
         LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(14),dp(14),dp(14),dp(30));sv.addView(root);
         TextView title=label("MagnetRute",26,TEXT,true);add(root,title,1);
-        TextView subtitle=label("v0.2.0  •  Virtuelle Wünschelrute & Magnetfeld-Labor",12,SUB,false);
+        TextView subtitle=label("v0.3.0  •  Virtuelle Wünschelrute & Magnetfeld-Labor",12,SUB,false);
         add(root,subtitle,12);
+        Button plans=button("Grundriss-Scanner öffnen",MINT);
+        plans.setOnClickListener(v -> startActivity(new Intent(this,PlanActivity.class)));
+        add(root,plans,12);
 
         statusView=label("Sensor wird gesucht ...",12,MINT,false);
         add(root,statusView,10);
@@ -354,7 +357,7 @@ public final class MainActivity extends Activity implements SensorEventListener,
             intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.setType("application/zip");
             String stamp=new SimpleDateFormat("yyyyMMdd_HHmmss",Locale.US).format(new Date());
-            intent.putExtra(Intent.EXTRA_TITLE,"MagnetRute_v0.2_Log_"+stamp+".zip");
+            intent.putExtra(Intent.EXTRA_TITLE,"MagnetRute_v0.3_Log_"+stamp+".zip");
             startActivityForResult(intent,ZIP_SAVE_REQUEST);
         } catch(Exception e) {
             Toast.makeText(this,"Speichern: "+e.getMessage(),Toast.LENGTH_LONG).show();
@@ -383,7 +386,7 @@ public final class MainActivity extends Activity implements SensorEventListener,
             Intent send=new Intent(Intent.ACTION_SEND);
             send.setType("application/zip");
             send.putExtra(Intent.EXTRA_STREAM,LogExportProvider.URI);
-            send.putExtra(Intent.EXTRA_SUBJECT,"MagnetRute v0.2 Messlog");
+            send.putExtra(Intent.EXTRA_SUBJECT,"MagnetRute v0.3 Messlog");
             send.setClipData(ClipData.newRawUri("MagnetRute_Log.zip",LogExportProvider.URI));
             send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             startActivity(Intent.createChooser(send,"Log teilen (z.B. ChatGPT, Drive, Mail)"));

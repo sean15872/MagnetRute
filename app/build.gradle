@@ -10,8 +10,8 @@ android {
         applicationId 'at.andi.magnetrute'
         minSdk 26
         targetSdk 34
-        versionCode 2
-        versionName '0.2.0'
+        versionCode 3
+        versionName '0.3.0'
     }
 
     compileOptions {
@@ -19,9 +19,38 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
+    testOptions {
+        unitTests.includeAndroidResources = true
+        unitTests.all {
+            // Robolectric's download lock uses user.home directly; isolate only
+            // the test JVM so builds also work with a read-only account home.
+            def robolectricHome = new File(gradle.gradleUserHomeDir, 'robolectric')
+            systemProperty 'user.home', robolectricHome.absolutePath
+            doFirst { robolectricHome.mkdirs() }
+            // Robolectric resolves its Android runtime inside the test worker JVM.
+            // Reuse an explicitly configured development proxy/trust store there.
+            ['https.proxyHost', 'https.proxyPort', 'http.proxyHost', 'http.proxyPort',
+             'http.nonProxyHosts', 'javax.net.ssl.trustStore'].each { key ->
+                if (System.getProperty(key) != null) systemProperty key, System.getProperty(key)
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
         }
+    }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.14.1'
+}
+
+// Used by CI so APK names always follow the application's version metadata.
+tasks.register('printVersion') {
+    doLast {
+        println android.defaultConfig.versionName
     }
 }

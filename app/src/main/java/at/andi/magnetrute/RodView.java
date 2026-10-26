@@ -56,7 +56,7 @@ public final class RodView extends View {
         canvas.drawCircle(lX, y, 10*d, p); canvas.drawCircle(rX, y, 10*d, p);
         p.setColor(0xff15243b);
         canvas.drawCircle(lX, y, 5*d, p); canvas.drawCircle(rX, y, 5*d, p);
-        p.setTextAlign(Paint.Align.CENTER); p.setTypeface(android.graphics.Typeface.create("sans-serif-medium", 0));
+        p.setTextAlign(Paint.Align.CENTER); p.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL));
         p.setTextSize(14*d); p.setColor(0xffa4b7d0);
         String title = !hasReference ? "Referenz wird vorbereitet" : !valid ? "Messung nicht verfuegbar" :
                 (progress > .75f ? "DEUTLICHER AUSSCHLAG" : "Ruten reagieren auf ΔB");

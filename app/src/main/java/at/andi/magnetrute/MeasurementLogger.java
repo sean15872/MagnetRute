@@ -238,7 +238,7 @@ public final class MeasurementLogger {
         if (sessionFolder == null) return;
         File file = new File(sessionFolder, "diagnose.txt");
         try (BufferedWriter w = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8))) {
-            w.write("MagnetRute v0.2.0 – Diagnosebericht\n");
+            w.write("MagnetRute v0.3.0 – Diagnosebericht\n");
             w.write("Erstellt: " + time() + "\n");
             w.write("Android-Version: " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")\n");
             w.write("Geraet: " + Build.MANUFACTURER + " / " + Build.MODEL + "\n");
